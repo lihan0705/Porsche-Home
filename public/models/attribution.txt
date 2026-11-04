@@ -1,0 +1,24 @@
+Porsche 911 Carrera 4S
+Original 3D model by Karol Miklas / Lionsharp Studios.
+Original creator listing:
+https://sketchfab.com/3d-models/free-porsche-911-carrera-4s-d01b254483794de3819786d93e0e1ebf
+
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0).
+https://creativecommons.org/licenses/by-sa/4.0/
+
+This GLB is the public demonstration asset supplied by the PlayCanvas Developer Site:
+https://developer.playcanvas.com/assets/porsche-911-carrera-4s.glb
+https://developer.playcanvas.com/user-manual/web-components/loading-models/
+
+Changes in this website: model display scale/orientation, optional material color overrides,
+and illustrative assembly-group position changes for the interactive exploded view.
+The model and adaptations remain available under CC BY-SA 4.0; the license does not
+claim that Porsche AG has endorsed this demonstration.
+
+This asset is an exterior/cabin visualization with separately named model nodes.
+It is not manufacturer CAD, a workshop service document, or a validated engineering
+assembly. Interactive disassembly is an illustrative grouping demonstration.
+
+License checked against the original Sketchfab creator listing and the PlayCanvas
+documentation on 2026-11-04. Some third-party mirrors incorrectly describe the model
+as CC BY only; the original creator listing specifies Attribution-ShareAlike.
