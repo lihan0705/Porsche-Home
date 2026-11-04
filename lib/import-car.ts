@@ -22,11 +22,11 @@ function splitSide(source:THREE.BufferGeometry,side:number) {
 }
 
 /** Runtime assembly of the attributed CC BY-SA model; the source GLB is kept unchanged. */
-export async function loadDisplayCar(color:string):Promise<DisplayCar> {
+export async function loadDisplayCar(color:string,onProgress?:(fraction:number)=>void):Promise<DisplayCar> {
   const draco=new DRACOLoader();draco.setDecoderPath('/models/draco/');
   const loader=new GLTFLoader();loader.setDRACOLoader(draco);
   let gltf;
-  try{gltf=await loader.loadAsync('/models/porsche-911-carrera-4s.glb');}finally{draco.dispose();}
+  try{gltf=await loader.loadAsync('/models/porsche-911-carrera-4s.glb',event=>{if(event.total>0)onProgress?.(event.loaded/event.total);});}finally{draco.dispose();}
   const source=gltf.scene;const plane=source.getObjectByName('Plane');plane?.removeFromParent();source.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const normalization=new THREE.Matrix4().makeScale(4.75/size.z,4.75/size.z,4.75/size.z);

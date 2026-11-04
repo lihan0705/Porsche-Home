@@ -7,28 +7,38 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { HomeConfig } from '../lib/home-config';
 import { createConceptCar } from '../lib/car-geometry';
 import { loadDisplayCar, type DisplayCar } from '../lib/import-car';
+import { addWorldDetails } from '../lib/world-details';
 
-type Props = {config:HomeConfig; view:'home'|'workshop'; explode:number; onReady?:()=>void; onPartSelect?:(part:string)=>void};
+export type ScenePlace = 'map'|'home'|'workshop'|'memories'|'terrace';
+type Props = {config:HomeConfig; view:ScenePlace; explode:number; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
 type Runtime = {setConfig:(config:HomeConfig)=>void; setView:(view:Props['view'])=>void; setExplode:(n:number)=>void};
+const DESTINATIONS: {id:Exclude<ScenePlace,'map'>;name:string;subtitle:string;position:[number,number,number]}[] = [
+  {id:'home',name:'庭院之家',subtitle:'YOUR HOME',position:[-2,6,-4]},
+  {id:'workshop',name:'工程工坊',subtitle:'THE WORKSHOP',position:[26,5.8,-7]},
+  {id:'memories',name:'记忆展亭',subtitle:'MEMORY PAVILION',position:[-22,5.4,-16]},
+  {id:'terrace',name:'来客露台',subtitle:'GUEST TERRACE',position:[-21,4.2,18]},
+];
 
-export default function GardenScene({config,view,explode,onReady,onPartSelect}:Props) {
+export default function GardenScene({config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
   const host=useRef<HTMLDivElement>(null), runtime=useRef<Runtime|null>(null);
-  const latest=useRef({config,view,explode,onReady,onPartSelect}); latest.current={config,view,explode,onReady,onPartSelect};
+  const hotspots=useRef<Record<string,HTMLButtonElement|null>>({});
+  const latest=useRef({config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
   useEffect(()=>{
     if(!host.current)return;
     const container=host.current;
+    latest.current.onLoadingProgress?.(8,'正在铺开山野与道路');
     let renderer:THREE.WebGLRenderer;
-    try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});}catch{container.dataset.webgl='unavailable';latest.current.onReady?.();return;}
+    try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});}catch{container.dataset.webgl='unavailable';latest.current.onLoadingProgress?.(100,'基础布置已就绪');latest.current.onReady?.();return;}
     renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.8)); renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
     renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;renderer.outputColorSpace=THREE.SRGBColorSpace;
     renderer.domElement.style.cssText='display:block;width:100%;height:100%;touch-action:none';container.appendChild(renderer.domElement);
     const scene=new THREE.Scene();scene.background=new THREE.Color('#c1c5b7');scene.fog=new THREE.Fog('#c1c5b7',44,115);
     const pmrem=new THREE.PMREMGenerator(renderer),roomEnvironment=new RoomEnvironment();
     const environment=pmrem.fromScene(roomEnvironment,.04);scene.environment=environment.texture;scene.environmentIntensity=.42;roomEnvironment.dispose();pmrem.dispose();
-    const camera=new THREE.PerspectiveCamera(38,1,.1,250);camera.position.set(21,16,25);
-    const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.1,0);controls.enableDamping=true;controls.dampingFactor=.055;controls.minDistance=6;controls.maxDistance=44;controls.maxPolarAngle=Math.PI*.48;controls.minPolarAngle=.18;controls.enablePan=false;
+    const camera=new THREE.PerspectiveCamera(38,1,.1,500);camera.position.set(21,16,25);
+    const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.1,0);controls.enableDamping=true;controls.dampingFactor=.055;controls.minDistance=6;controls.maxDistance=240;controls.maxPolarAngle=Math.PI*.48;controls.minPolarAngle=.18;controls.enablePan=true;controls.screenSpacePanning=false;controls.panSpeed=.7;
     const ambient=new THREE.HemisphereLight('#e5e6d7','#596344',1.15);scene.add(ambient);
-    const sunlight=new THREE.DirectionalLight('#fff1cd',3.35);sunlight.position.set(-13,24,9);sunlight.castShadow=true;sunlight.shadow.mapSize.set(2048,2048);sunlight.shadow.camera.left=-22;sunlight.shadow.camera.right=22;sunlight.shadow.camera.top=22;sunlight.shadow.camera.bottom=-22;sunlight.shadow.normalBias=.04;sunlight.shadow.bias=-.00015;scene.add(sunlight);
+    const sunlight=new THREE.DirectionalLight('#fff1cd',3.35);sunlight.position.set(-13,24,9);sunlight.castShadow=true;sunlight.shadow.mapSize.set(2048,2048);sunlight.shadow.camera.left=-50;sunlight.shadow.camera.right=50;sunlight.shadow.camera.top=50;sunlight.shadow.camera.bottom=-50;sunlight.shadow.normalBias=.04;sunlight.shadow.bias=-.00015;scene.add(sunlight);
     const fill=new THREE.DirectionalLight('#b9d2d7',.45);fill.position.set(12,9,-10);scene.add(fill);
     const materials:THREE.Material[]=[];
     const standard=(color:string,roughness=.85,metalness=0)=>{const mat=new THREE.MeshStandardMaterial({color,roughness,metalness});materials.push(mat);return mat;};
@@ -48,6 +58,99 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect}:P
     // A horizon of quiet rolling hills gives the tiny home a larger world.
     for(let i=0;i<17;i++) {const a=i/17*Math.PI*2;const hill=sphere(terrain,standard(i%2?'#879776':'#94a183'),1,Math.cos(a)*(47+rand()*14),-3.6,Math.sin(a)*(48+rand()*12),10+rand()*11,6+rand()*8,9+rand()*12);hill.castShadow=false;}
     const island=new THREE.Group();scene.add(island);
+    const world=new THREE.Group();scene.add(world);
+    // The house is one address in a connected landscape, with several places to discover.
+    const outline=new THREE.Shape();outline.moveTo(-37,-29);outline.bezierCurveTo(-47,-19,-43,12,-34,27);outline.bezierCurveTo(-21,37,4,34,23,29);outline.bezierCurveTo(43,24,47,5,41,-17);outline.bezierCurveTo(36,-32,14,-37,-5,-33);outline.bezierCurveTo(-21,-38,-33,-36,-37,-29);
+    const landscape=mesh(new THREE.ExtrudeGeometry(outline,{depth:.55,bevelEnabled:false,curveSegments:12}),[grass,edgeStone] as unknown as THREE.Material,world,0,-.575,0);landscape.rotation.x=-Math.PI/2;landscape.castShadow=false;
+    const pathMat=standard('#b7a88c'),pathEdge=standard('#9c947b');
+    function path(points:[number,number][],width=1.65){
+      const curve=new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,.035,z))),positions:number[]=[],indices:number[]=[];
+      for(let i=0;i<=70;i++){
+        const t=i/70,p=curve.getPoint(t),direction=curve.getTangent(t),normal=new THREE.Vector3(-direction.z,0,direction.x).multiplyScalar(width/2);
+        positions.push(p.x+normal.x,p.y,p.z+normal.z,p.x-normal.x,p.y,p.z-normal.z);
+        if(i<70){const n=i*2;indices.push(n,n+2,n+1,n+1,n+2,n+3);}
+      }
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);geo.computeVertexNormals();
+      const ribbon=mesh(geo,pathMat,world);ribbon.castShadow=false;
+      for(const side of[-1,1]){
+        const edgePoints=Array.from({length:45},(_,i)=>{const t=i/44,p=curve.getPoint(t),d=curve.getTangent(t);return p.add(new THREE.Vector3(-d.z,0,d.x).multiplyScalar(side*width/2));});
+        const edging=mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edgePoints),44,.045,5,false),pathEdge,world);edging.castShadow=false;
+      }
+    }
+    path([[10,-4],[15,-4],[18,-8],[23,-8]],2.1);
+    path([[-9,-7],[-14,-9],[-16,-12],[-22,-11]],1.9);
+    path([[-5,9],[-9,12],[-12,17],[-18,18]],2);
+    path([[-23,-20],[-15,-26],[2,-25],[17,-23],[27,-15]],1.45);
+    path([[-19,24],[-8,28],[7,25],[20,19],[29,9],[28,1]],1.6);
+    // A freestanding workshop: the open forecourt keeps all exploded parts in view.
+    const workshop=new THREE.Group();workshop.position.set(26,0,-6);world.add(workshop);
+    box(workshop,edgeStone,14,.24,16,0,.06,0);box(workshop,stone,13.6,.1,15.6,0,.23,0);
+    box(workshop,concrete,12,4.1,.25,0,2.35,-5.8);box(workshop,wood,12.6,.22,4.6,0,4.58,-4.15);
+    box(workshop,dark,.16,4.3,4.7,-5.9,2.4,-4.15);box(workshop,glass,.06,4.1,5.3,5.9,2.35,-3.35);
+    for(let i=0;i<10;i++)box(workshop,woodLight,.13,.1,4.4,-5.6+i*1.24,4.42,-4.15);
+    box(workshop,warmGlow,10.7,.035,.055,0,4.23,-5.6);glow(workshop,0,3.4,-4,8);
+    box(workshop,wood,4.3,.17,1.05,-2.4,1.25,-4.65);for(const x of[-4.15,-.65])box(workshop,dark,.08,1.08,.7,x,.64,-4.65);
+    box(workshop,dark,2.6,1.8,1.1,3.3,1.2,-4.7);for(let i=0;i<5;i++)box(workshop,brass,.65,.025,.04,3.3,.56+i*.29,-4.13);
+    box(workshop,dark,3.8,1.6,.08,-2.4,2.7,-5.62);for(let i=0;i<7;i++){box(workshop,brass,.06,.46,.06,-3.8+i*.47,2.85,-5.51);cylinder(workshop,brass,.07,.12,-3.8+i*.47,1.4,-4.5,10);}
+    cylinder(workshop,standard('#7e8676'),4.7,.15,0,.36,2.05,64);cylinder(workshop,standard('#b7b4a4'),4.45,.035,0,.46,2.05,64);
+    for(const x of[-5.8,5.8]){box(workshop,dark,.09,2.5,.09,x,1.55,4.5);box(workshop,warmGlow,.34,.09,.34,x,2.83,4.5);}
+    // Glass memory pavilion: empty landscape panels are symbolic frames for the owner's stories.
+    const pavilion=new THREE.Group();pavilion.position.set(-22,0,-16);world.add(pavilion);
+    box(pavilion,edgeStone,10,.25,10,0,.08,0);box(pavilion,concrete,9.6,.16,9.6,0,.28,0);
+    for(const x of[-4.3,4.3])for(const z of[-4.1,4.1])box(pavilion,dark,.12,4.5,.12,x,2.6,z);
+    box(pavilion,glass,8.6,4.2,.03,0,2.55,-4.1);box(pavilion,glass,.03,4.2,8.2,-4.3,2.55,0);
+    box(pavilion,glass,.03,4.2,8.2,4.3,2.55,0);box(pavilion,glass,8.9,.055,8.5,0,4.87,0);
+    for(let i=0;i<6;i++)box(pavilion,dark,.055,.09,8.7,-4.45+i*1.78,4.9,0);
+    for(const z of[-4.35,4.35])box(pavilion,dark,9,.09,.055,0,4.9,z);
+    const frameColors=['#9aaa8e','#c1a77f','#799c99'];
+    for(let i=0;i<3;i++){
+      const x=(i-1)*2.7;box(pavilion,wood,2.06,2.5,.13,x,2.45,-2.8);box(pavilion,standard(frameColors[i]),1.82,2.26,.045,x,2.45,-2.71);
+      // Geometric contours suggest a landscape without inventing any personal photographs.
+      const contour=mesh(new THREE.CircleGeometry(.72,28,0,Math.PI),standard(i===1?'#a18b68':'#627f6b'),pavilion,x+.13,2.2,-2.67);contour.scale.y=.48;
+      box(pavilion,brass,1.2,.045,.03,x,1.03,-2.69);box(pavilion,warmGlow,1.85,.035,.055,x,3.91,-2.63);
+    }
+    cylinder(pavilion,wood,.65,.1,0,.95,1.1,32);cylinder(pavilion,dark,.12,.55,0,.65,1.1,12);
+    box(pavilion,woodLight,2.1,.19,.55,-2.5,.73,2.3);for(const x of[-3.3,-1.7])box(pavilion,dark,.07,.4,.4,x,.46,2.3);
+    glow(pavilion,0,4.1,-1.3,6);box(pavilion,stone,5,.12,1,0,.19,5.2);box(pavilion,stone,5.6,.1,1,0,.07,6.1);
+    // A separate garden terrace is the social address: chairs, tea, cards and a mailbox.
+    const terrace=new THREE.Group();terrace.position.set(-21,0,18);world.add(terrace);
+    cylinder(terrace,edgeStone,8,.25,0,.06,0,64);cylinder(terrace,stone,7.75,.12,0,.24,0,64);
+    box(terrace,woodLight,8.5,.14,6.3,-.6,.38,-.6);
+    for(const x of[-4.6,3.4])for(const z of[-3.5,2.2])box(terrace,wood,.15,3.4,.15,x,2.1,z);
+    for(let i=0;i<13;i++)box(terrace,wood,.13,.17,6.6,-4.8+i*.7,3.9,-.65);
+    for(const z of[-3.65,2.35])box(terrace,wood,9.3,.17,.14,-.6,3.75,z);
+    cylinder(terrace,concrete,1.35,.12,-.6,1.32,-.6,48);cylinder(terrace,dark,.15,.85,-.6,.84,-.6,16);
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3,x=-.6+Math.cos(a)*2.1,z=-.6+Math.sin(a)*2.1;
+      cylinder(terrace,wood,.43,.12,x,.91,z,20);for(const dx of[-.25,.25])for(const dz of[-.22,.22])box(terrace,dark,.045,.46,.045,x+dx,.62,z+dz);
+      const chairBack=box(terrace,woodLight,.82,.65,.09,x+Math.cos(a)*.33,1.28,z+Math.sin(a)*.33);chairBack.rotation.y=Math.PI/2-a;
+    }
+    cylinder(terrace,brass,.19,.27,-.65,1.52,-.6,24);sphere(terrace,leaf,.23,-.65,1.8,-.6,.9,1.1,.9);
+    for(const[x,z]of[[-1.2,-.6],[.2,-.9],[-.6,.2]] as number[][]){cylinder(terrace,concrete,.11,.14,x,1.48,z,18);cylinder(terrace,stone,.17,.025,x,1.4,z,24);}
+    const mailbox=new THREE.Group();mailbox.position.set(6.6,0,-2.4);terrace.add(mailbox);
+    box(mailbox,wood,.13,1.25,.13,0,.9,0);box(mailbox,standard('#526b58'),.9,.63,.65,0,1.74,0);box(mailbox,brass,.55,.045,.03,0,1.82,.34);box(mailbox,stone,.37,.23,.025,.1,1.75,.36);
+    const flag=box(mailbox,standard('#a86248'),.3,.15,.045,.52,2.04,0);flag.rotation.z=.15;
+    box(terrace,wood,2.8,.16,.65,1.8,.83,5.6);for(const x of[.7,2.9])box(terrace,dark,.07,.5,.5,x,.5,5.6);
+    glow(terrace,-.6,3.35,-.6,5);for(const x of[-3.6,2.4])box(terrace,warmGlow,.2,.15,.2,x,3.59,-.6);
+    // Reused instanced forest geometry keeps the larger map affordable to render.
+    const forestPositions:[number,number,number][]=[];
+    for(let i=0;i<58;i++){
+      const a=i/58*Math.PI*2,r=30+rand()*9;const x=Math.cos(a)*r,z=Math.sin(a)*(25+rand()*7);
+      if((x>17&&z>-15&&z<3)||(x<-15&&z>-23&&z<-8)||(x<-12&&z>10&&z<27))continue;
+      forestPositions.push([x,z,.8+rand()*.65]);
+    }
+    forestPositions.push([-14,-18,1.2],[-11,-18,.9],[9,-17,1.35],[15,-13,1],[13,10,.9],[-14,5,1.1],[-28,5,1.3],[34,6,1.2],[-32,-10,1.1]);
+    // Keep the desktop and portrait workshop approach clear of foreground canopy.
+    for(let i=forestPositions.length-1;i>=0;i--){const[x,z]=forestPositions[i];if(x>24&&x<43&&z>0&&z<18)forestPositions.splice(i,1);}
+    const forestTrunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.13,.19,2.9,7),wood,forestPositions.length);
+    const forestCanopies=new THREE.InstancedMesh(new THREE.ConeGeometry(1.15,2.4,8),leaf,forestPositions.length*3);
+    const forestDummy=new THREE.Object3D(),forestColor=new THREE.Color();
+    forestPositions.forEach(([x,z,s],i)=>{
+      forestDummy.position.set(x,1.43*s,z);forestDummy.rotation.set(0,0,0);forestDummy.scale.set(s,s,s);forestDummy.updateMatrix();forestTrunks.setMatrixAt(i,forestDummy.matrix);
+      for(let j=0;j<3;j++){forestDummy.position.set(x,(2.15+j*.7)*s,z);forestDummy.rotation.y=i*.63;forestDummy.scale.setScalar(s*(1-j*.17));forestDummy.updateMatrix();forestCanopies.setMatrixAt(i*3+j,forestDummy.matrix);forestColor.set(i%3?'#687f50':'#526b48');forestCanopies.setColorAt(i*3+j,forestColor);}
+    });forestTrunks.castShadow=true;forestCanopies.castShadow=true;world.add(forestTrunks,forestCanopies);
+    for(const[x,z]of[[14,-4],[-13,-9],[-10,13],[-9,-25],[10,-24],[26,-17],[28,10],[9,25],[-13,27]] as number[][]){cylinder(world,dark,.045,1.45,x,.72,z,8);box(world,warmGlow,.22,.085,.22,x,1.48,z);}
+    for(const[x,z,s]of[[-31,-21,1.3],[35,-16,1.5],[7,31,1.5],[-30,28,1.3],[-10,-30,1.1]] as number[][]){sphere(world,edgeStone,1,x,.38,z,s,.55*s,s*.8);sphere(world,leaf,.7,x+1.2,.25,z+.5,1,.6,1);}
     box(island,edgeStone,24,.5,21,0,-.21,0);box(island,grass,23.8,.12,20.8,0,.07,0);
     // Crisp travertine edges, an inset pool, and staggered pavers.
     box(island,stone,10.3,.13,9.2,2.9,.16,3.2);
@@ -152,18 +255,22 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect}:P
     const pebbles=new THREE.InstancedMesh(pebbleGeo,pebbleMat,140);const dummy=new THREE.Object3D();
     for(let i=0;i<140;i++){dummy.position.set(-10.1+rand()*1.3,.19,-9+rand()*18);dummy.scale.set(1+rand(),.5,1+rand());dummy.updateMatrix();pebbles.setMatrixAt(i,dummy.matrix);}island.add(pebbles);
     const car=createConceptCar(latest.current.config.carColor);car.group.position.set(3.12,.255,4.3);car.group.rotation.y=-.06;island.add(car.group);
+    const worldDetails=addWorldDetails(world,island);
+    latest.current.onLoadingProgress?.(35,'正在唤醒你的 911');
     let displayCar:DisplayCar|null=null;
+    let readyPending=false;
     const engineRoot=new THREE.Group();engineRoot.position.copy(car.group.position);engineRoot.rotation.copy(car.group.rotation);engineRoot.visible=false;island.add(engineRoot);
-    loadDisplayCar(latest.current.config.carColor).then(loaded=>{
+    loadDisplayCar(latest.current.config.carColor,fraction=>{if(!stopped)latest.current.onLoadingProgress?.(38+Math.min(1,fraction)*47,'正在载入 911 Carrera 4S');}).then(loaded=>{
       if(stopped){loaded.group.traverse(n=>{if(n instanceof THREE.Mesh)n.geometry.dispose();});return;}
       displayCar=loaded;loaded.group.position.copy(car.group.position);loaded.group.rotation.copy(car.group.rotation);island.add(loaded.group);car.group.visible=false;
       const engine=car.parts.find(p=>p.group.userData.part==='powertrain');if(engine){car.group.remove(engine.group);engineRoot.add(engine.group);}
       loaded.paint.color.set(latest.current.config.carColor);loaded.rims.forEach(m=>m.color.set(latest.current.config.wheels==='black'?'#353a36':'#c0c5c3'));
       container.dataset.carModel='carrera-4s';
-    }).catch(()=>{container.dataset.carModel='concept-fallback';});
+      latest.current.onLoadingProgress?.(96,'正在点亮车库与庭院');readyPending=true;
+    }).catch(()=>{if(stopped)return;container.dataset.carModel='concept-fallback';latest.current.onLoadingProgress?.(96,'概念车型已就绪');readyPending=true;});
     // Rain and stars remain light enough for a laptop browser.
-    const rainPositions=new Float32Array(600*6);
-    for(let i=0;i<600;i++){const x=(rand()-.5)*31,y=rand()*17,z=(rand()-.5)*29;rainPositions.set([x,y,z,x-.05,y-.38,z+.02],i*6);}
+    const rainCount=1000,rainPositions=new Float32Array(rainCount*6);
+    for(let i=0;i<rainCount;i++){const x=(rand()-.5)*88,y=rand()*17,z=(rand()-.5)*76;rainPositions.set([x,y,z,x-.05,y-.38,z+.02],i*6);}
     const rainGeometry=new THREE.BufferGeometry();rainGeometry.setAttribute('position',new THREE.BufferAttribute(rainPositions,3));
     const rain=new THREE.LineSegments(rainGeometry,new THREE.LineBasicMaterial({color:'#c8d7cf',transparent:true,opacity:.38}));scene.add(rain);
     const starsPositions=new Float32Array(230*3);for(let i=0;i<230;i++)starsPositions.set([(rand()-.5)*140,20+rand()*65,-30-rand()*65],i*3);
@@ -172,7 +279,24 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect}:P
     let currentView=latest.current.view,desiredExplode=latest.current.explode,actualExplode=desiredExplode,transition=true;
     const desiredCamera=new THREE.Vector3(),desiredTarget=new THREE.Vector3();
     const sunTarget=new THREE.Color(),fogTarget=new THREE.Color();let ambientTarget=1.15,sunIntensity=3.35,exposureTarget=1.02;
-    function setView(v:Props['view']){currentView=v;transition=true;const narrow=container.clientWidth<650;if(v==='workshop'){desiredCamera.set(11,6.3,14.5);desiredTarget.set(3.1,1.25,4.2);controls.minDistance=4.7;controls.maxDistance=20;}else{desiredCamera.set(narrow?27:21,narrow?23:16,narrow?34:25);desiredTarget.set(0,1.1,0);controls.minDistance=16;controls.maxDistance=44;}}
+    function setView(v:Props['view']){
+      currentView=v;transition=true;const narrow=container.clientWidth<650,aspect=container.clientWidth/Math.max(container.clientHeight,1);
+      controls.maxDistance=350;controls.minDistance=v==='map'?30:5;
+      if(v==='map'){
+        const fit=Math.max(1,.98/aspect);desiredCamera.set(72*fit,65*fit,87*fit);desiredTarget.set(-1,1,0);
+      }else if(v==='workshop'){
+        desiredCamera.set(narrow?37:34,narrow?9:6.3,narrow?12:6.5);desiredTarget.set(26,1.35,-4);
+      }else if(v==='memories'){
+        desiredCamera.set(narrow?-8:-11,narrow?10:8,narrow?5:-2);desiredTarget.set(-22,1.55,-16);
+      }else if(v==='terrace'){
+        desiredCamera.set(narrow?-6:-9,narrow?12:9,narrow?38:33);desiredTarget.set(-21,1.3,18);
+      }else{
+        desiredCamera.set(narrow?27:21,narrow?23:16,narrow?34:25);desiredTarget.set(0,1.1,0);controls.minDistance=14;
+      }
+      if(scene.fog instanceof THREE.Fog){scene.fog.near=v==='map'?230:52;scene.fog.far=v==='map'?470:175;}
+      car.group.position.set(v==='workshop'?26:3.12,v==='workshop'?.49:.255,v==='workshop'?-3.95:4.3);
+      displayCar?.group.position.copy(car.group.position);engineRoot.position.copy(car.group.position);
+    }
     function setConfig(c:HomeConfig){
       Object.entries(buildings).forEach(([key,b])=>b.visible=key===c.architecture);Object.entries(plantTypes).forEach(([key,p])=>p.visible=key===c.plants);
       car.paint.color.set(c.carColor);car.rims.color.set(c.wheels==='black'?'#353a36':'#c0c5c3');
@@ -188,7 +312,7 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect}:P
     runtime.current={setConfig,setView,setExplode:n=>{desiredExplode=THREE.MathUtils.clamp(n,0,1);}};
     setConfig(latest.current.config);setView(latest.current.view);
     camera.position.copy(desiredCamera);controls.target.copy(desiredTarget);transition=false;
-    const resize=()=>{const width=container.clientWidth||1,height=container.clientHeight||1;renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();};
+    const resize=()=>{const width=container.clientWidth||1,height=container.clientHeight||1;renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();setView(currentView);};
     const observer=new ResizeObserver(resize);observer.observe(container);resize();
     let pointerStart={x:0,y:0};const down=(event:PointerEvent)=>{pointerStart={x:event.clientX,y:event.clientY};transition=false;};
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
@@ -200,17 +324,37 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect}:P
       if(transition){camera.position.lerp(desiredCamera,1-Math.exp(-delta*3.2));controls.target.lerp(desiredTarget,1-Math.exp(-delta*3.2));if(camera.position.distanceTo(desiredCamera)<.025)transition=false;}
       actualExplode=THREE.MathUtils.lerp(actualExplode,desiredExplode,1-Math.exp(-delta*7));
       car.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));
-      displayCar?.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));engineRoot.visible=!!displayCar&&actualExplode>.08;
+      displayCar?.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));engineRoot.visible=!!displayCar&&currentView==='workshop'&&actualExplode>.08;
       scene.background instanceof THREE.Color&&scene.background.lerp(fogTarget,.025);if(scene.fog instanceof THREE.Fog)scene.fog.color.copy(scene.background as THREE.Color);
       sunlight.color.lerp(sunTarget,.025);sunlight.intensity=THREE.MathUtils.lerp(sunlight.intensity,sunIntensity,.025);ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,ambientTarget,.025);renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,exposureTarget,.025);
-      if(rain.visible){const points=rainGeometry.attributes.position.array as Float32Array;for(let i=0;i<600;i++){points[i*6+1]-=delta*9;points[i*6+4]-=delta*9;if(points[i*6+1]<0){points[i*6+1]+=17;points[i*6+4]+=17;}}rainGeometry.attributes.position.needsUpdate=true;}
+      if(rain.visible){const points=rainGeometry.attributes.position.array as Float32Array;for(let i=0;i<rainCount;i++){points[i*6+1]-=delta*9;points[i*6+4]-=delta*9;if(points[i*6+1]<0){points[i*6+1]+=17;points[i*6+4]+=17;}}rainGeometry.attributes.position.needsUpdate=true;}
       controls.update();renderer.render(scene,camera);
+      if(readyPending){readyPending=false;latest.current.onLoadingProgress?.(100,'欢迎回家。');latest.current.onReady?.();}
+      const placed:{x:number;y:number;width:number;height:number}[]=[];
+      DESTINATIONS.forEach(place=>{
+        const button=hotspots.current[place.id];if(!button)return;
+        if(currentView!=='map'){button.style.visibility='hidden';return;}
+        const projected=new THREE.Vector3(...place.position).project(camera);
+        if(projected.z>1||projected.z<0||Math.abs(projected.x)>1.15||Math.abs(projected.y)>1.15){button.style.visibility='hidden';return;}
+        const width=container.clientWidth,height=container.clientHeight,bw=button.offsetWidth||116,bh=button.offsetHeight||52;
+        let x=THREE.MathUtils.clamp((projected.x*.5+.5)*width,bw/2+8,width-bw/2-8),y=THREE.MathUtils.clamp((-projected.y*.5+.5)*height,125,height-145);
+        for(let pass=0;pass<5;pass++){
+          const collision=placed.find(p=>Math.abs(p.x-x)<(p.width+bw)/2+5&&Math.abs(p.y-y)<(p.height+bh)/2+5);
+          if(!collision)break;y=Math.min(height-145,collision.y+(collision.height+bh)/2+9);
+        }
+        placed.push({x,y,width:bw,height:bh});button.style.visibility='visible';button.style.transform=`translate3d(${x}px,${y}px,0) translate(-50%,-100%)`;
+      });
     };
-    frame=requestAnimationFrame(render);latest.current.onReady?.();
-    return()=>{stopped=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',down);renderer.domElement.removeEventListener('pointerup',up);scene.traverse(node=>{if(node instanceof THREE.Mesh||node instanceof THREE.Points||node instanceof THREE.LineSegments){node.geometry.dispose();const mats=Array.isArray(node.material)?node.material:[node.material];mats.forEach(m=>m.dispose());}});environment.dispose();renderer.dispose();renderer.domElement.remove();runtime.current=null;};
+    frame=requestAnimationFrame(render);
+    return()=>{stopped=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',down);renderer.domElement.removeEventListener('pointerup',up);scene.traverse(node=>{if(node instanceof THREE.Mesh||node instanceof THREE.Points||node instanceof THREE.LineSegments){node.geometry.dispose();const mats=Array.isArray(node.material)?node.material:[node.material];mats.forEach(m=>m.dispose());}});worldDetails.dispose();environment.dispose();renderer.dispose();renderer.domElement.remove();runtime.current=null;};
   },[]);
   useEffect(()=>{runtime.current?.setConfig(config);},[config]);
   useEffect(()=>{runtime.current?.setView(view);},[view]);
   useEffect(()=>{runtime.current?.setExplode(explode);},[explode]);
-  return <div ref={host} className="garden-canvas" style={{width:'100%',height:'100%',position:'relative'}} aria-label="可拖动旋转的庭院、住宅与 Porsche 911 Carrera 4S 三维场景；车型加载失败时显示概念模型，动力总成为示意"/>;
+  return <div ref={host} className="garden-canvas" style={{width:'100%',height:'100%',position:'relative'}} aria-label="可拖动、缩放和平移探索的保时捷之家地图，包含庭院、独立工坊、记忆展亭与来客露台；车型为 Porsche 911 Carrera 4S，动力总成为示意">
+    {DESTINATIONS.map(place=><button key={place.id} ref={node=>{hotspots.current[place.id]=node;}} type="button" className="world-hotspot" aria-label={`进入${place.name}`} onClick={()=>latest.current.onPlaceSelect?.(place.id)} style={{position:'absolute',zIndex:5,top:0,left:0,visibility:'hidden',pointerEvents:'auto',cursor:'pointer',border:'1px solid rgba(255,255,255,.7)',background:'rgba(248,246,236,.94)',color:'#354b38',borderRadius:14,padding:'11px 15px',boxShadow:'0 7px 25px rgba(37,50,31,.15)',fontFamily:'inherit',backdropFilter:'blur(10px)',whiteSpace:'nowrap',textAlign:'left'}}>
+      <span style={{display:'block',fontSize:13,fontWeight:600,letterSpacing:'.035em'}}><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#7e9567',marginRight:7,verticalAlign:'middle'}}/>{place.name}<span aria-hidden="true" style={{marginLeft:8,fontSize:12,opacity:.5}}>↗</span></span>
+      <span style={{display:'block',marginTop:4,fontSize:8,letterSpacing:'.13em',opacity:.58}}>{place.subtitle}</span>
+    </button>)}
+  </div>;
 }
