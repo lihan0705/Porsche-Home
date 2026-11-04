@@ -28,7 +28,7 @@ export function addWorldDetails(world:THREE.Group,home:THREE.Group) {
   for(let i=0;i<3;i++)box(world,cream,.7,.025,.025,22.1,.7+i*.15,-9.385);
   for(const x of[21.7,22.5])for(const z of[-9.9,-9.5]){const wheel=add(new THREE.CylinderGeometry(.09,.09,.05,12),dark,world,x,.43,z);wheel.rotation.z=Math.PI/2;}
   // A sweeping private driveway: painted curbs and dashed lane markings.
-  const curve=new THREE.CatmullRomCurve3([[26,-18],[35,-14],[38,-3],[33,13],[20,24],[8,26]].map(([x,z])=>new THREE.Vector3(x,.054,z)));
+  const curve=new THREE.CatmullRomCurve3([[26,-18],[35,-14],[38,-3],[33,13],[20,24],[8,26],[6,31],[6,41]].map(([x,z])=>new THREE.Vector3(x,.054,z)));
   const positions:number[]=[],indices:number[]=[];const width=2.65;
   for(let i=0;i<=90;i++){const t=i/90,p=curve.getPoint(t),d=curve.getTangent(t),n=new THREE.Vector3(-d.z,0,d.x).multiplyScalar(width/2);positions.push(p.x+n.x,p.y,p.z+n.z,p.x-n.x,p.y,p.z-n.z);if(i<90){const k=i*2;indices.push(k,k+2,k+1,k+1,k+2,k+3);}}
   const roadGeometry=new THREE.BufferGeometry();roadGeometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));roadGeometry.setIndex(indices);roadGeometry.computeVertexNormals();
@@ -71,5 +71,22 @@ export function addWorldDetails(world:THREE.Group,home:THREE.Group) {
   for(let i=0;i<3;i++){const card=box(world,i===1?red:cream,.28,.012,.18,-21.6+i*.28,1.4,17.05);card.rotation.y=i*.4;}
   // Direction signs create discoveries at the path junctions.
   for(const[x,z,text]of[[-13,9,'HOME / FRIENDS'],[13,-4,'ATELIER / 911'],[-13,-12,'MEMORIES / HOME']] as [number,number,string][]){box(world,wood,.07,1.45,.07,x,.75,z);graphic(text,'FOLLOW YOUR CURIOSITY',1.95,.73,x,1.75,z,world,.18,'light');}
-  return {dispose:()=>textures.forEach(t=>t.dispose())};
+  // The first arrival is at a real garden gate, with sliding leaves and a clear approach.
+  box(world,stone,31,.09,2.1,5.5,0,30);
+  for(const x of[.8,11.2]){
+    box(world,stone,1.05,3.35,1.05,x,1.68,30);box(world,cream,1.2,.16,1.2,x,3.43,30);
+    box(world,dark,.2,1.2,.06,x,2.18,30.56);box(world,glow,.035,1.02,.025,x,2.2,30.602);
+  }
+  box(world,dark,11.5,.58,.7,6,4.08,30);box(world,red,10.6,.035,.04,6,3.77,30.38);
+  graphic('PORSCHE HOME','YOUR PRIVATE WORLD',7.7,.83,6,4.15,30.37,world);
+  graphic('911','HOME',.72,.66,11.2,1.27,30.545,world,0,'light');
+  for(const x of[-4.05,16.05]){
+    box(world,stone,8.4,1.2,.55,x,.6,30);box(world,cream,8.55,.12,.68,x,1.25,30);
+    for(let i=0;i<22;i++)box(world,dark,.045,.67,.045,x-3.9+i*.37,1.64,30);
+    box(world,dark,8.3,.06,.06,x,1.98,30);
+  }
+  const gateLeaves=[new THREE.Group(),new THREE.Group()];
+  gateLeaves.forEach((gate,i)=>{gate.position.set(i?8.5:3.5,0,30);world.add(gate);box(gate,dark,4.8,.13,.13,0,.31,0);box(gate,dark,4.8,.12,.13,0,2.66,0);for(let j=0;j<17;j++)box(gate,dark,.055,2.33,.07,-2.23+j*.279,1.49,0);box(gate,red,.045,2.27,.085,i?-2.33:2.33,1.49,.015);});
+  for(const x of[-1.2,13.2]){add(new THREE.CylinderGeometry(.48,.36,.67,16),stone,world,x,.37,31.25);const shrub=add(new THREE.IcosahedronGeometry(.65,1),leaf,world,x,1.05,31.25);shrub.scale.y=.9;}
+  return {setGateOpen:(value:number)=>{gateLeaves[0].position.x=3.5-value*4.4;gateLeaves[1].position.x=8.5+value*4.4;},dispose:()=>textures.forEach(t=>t.dispose())};
 }

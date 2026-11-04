@@ -9,20 +9,20 @@ import { createConceptCar } from '../lib/car-geometry';
 import { loadDisplayCar, type DisplayCar } from '../lib/import-car';
 import { addWorldDetails } from '../lib/world-details';
 
-export type ScenePlace = 'map'|'home'|'workshop'|'memories'|'terrace';
-type Props = {config:HomeConfig; view:ScenePlace; explode:number; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
+export type ScenePlace = 'entry'|'map'|'home'|'workshop'|'memories'|'terrace';
+type Props = {config:HomeConfig; view:ScenePlace; explode:number; active?:boolean; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
 type Runtime = {setConfig:(config:HomeConfig)=>void; setView:(view:Props['view'])=>void; setExplode:(n:number)=>void};
-const DESTINATIONS: {id:Exclude<ScenePlace,'map'>;name:string;subtitle:string;position:[number,number,number]}[] = [
+const DESTINATIONS: {id:Exclude<ScenePlace,'map'|'entry'>;name:string;subtitle:string;position:[number,number,number]}[] = [
   {id:'home',name:'庭院之家',subtitle:'YOUR HOME',position:[-2,6,-4]},
   {id:'workshop',name:'工程工坊',subtitle:'THE WORKSHOP',position:[26,5.8,-7]},
   {id:'memories',name:'记忆展亭',subtitle:'MEMORY PAVILION',position:[-22,5.4,-16]},
   {id:'terrace',name:'来客露台',subtitle:'GUEST TERRACE',position:[-21,4.2,18]},
 ];
 
-export default function GardenScene({config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
+export default function GardenScene({config,view,explode,active=true,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
   const host=useRef<HTMLDivElement>(null), runtime=useRef<Runtime|null>(null);
   const hotspots=useRef<Record<string,HTMLButtonElement|null>>({});
-  const latest=useRef({config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
+  const latest=useRef({config,view,explode,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
   useEffect(()=>{
     if(!host.current)return;
     const container=host.current;
@@ -141,7 +141,7 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect,on
     }
     forestPositions.push([-14,-18,1.2],[-11,-18,.9],[9,-17,1.35],[15,-13,1],[13,10,.9],[-14,5,1.1],[-28,5,1.3],[34,6,1.2],[-32,-10,1.1]);
     // Keep the desktop and portrait workshop approach clear of foreground canopy.
-    for(let i=forestPositions.length-1;i>=0;i--){const[x,z]=forestPositions[i];if(x>24&&x<43&&z>0&&z<18)forestPositions.splice(i,1);}
+    for(let i=forestPositions.length-1;i>=0;i--){const[x,z]=forestPositions[i];if((x>24&&x<43&&z>0&&z<18)||(x>-1&&x<15&&z>23))forestPositions.splice(i,1);}
     const forestTrunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.13,.19,2.9,7),wood,forestPositions.length);
     const forestCanopies=new THREE.InstancedMesh(new THREE.ConeGeometry(1.15,2.4,8),leaf,forestPositions.length*3);
     const forestDummy=new THREE.Object3D(),forestColor=new THREE.Color();
@@ -150,7 +150,7 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect,on
       for(let j=0;j<3;j++){forestDummy.position.set(x,(2.15+j*.7)*s,z);forestDummy.rotation.y=i*.63;forestDummy.scale.setScalar(s*(1-j*.17));forestDummy.updateMatrix();forestCanopies.setMatrixAt(i*3+j,forestDummy.matrix);forestColor.set(i%3?'#687f50':'#526b48');forestCanopies.setColorAt(i*3+j,forestColor);}
     });forestTrunks.castShadow=true;forestCanopies.castShadow=true;world.add(forestTrunks,forestCanopies);
     for(const[x,z]of[[14,-4],[-13,-9],[-10,13],[-9,-25],[10,-24],[26,-17],[28,10],[9,25],[-13,27]] as number[][]){cylinder(world,dark,.045,1.45,x,.72,z,8);box(world,warmGlow,.22,.085,.22,x,1.48,z);}
-    for(const[x,z,s]of[[-31,-21,1.3],[35,-16,1.5],[7,31,1.5],[-30,28,1.3],[-10,-30,1.1]] as number[][]){sphere(world,edgeStone,1,x,.38,z,s,.55*s,s*.8);sphere(world,leaf,.7,x+1.2,.25,z+.5,1,.6,1);}
+    for(const[x,z,s]of[[-31,-21,1.3],[35,-16,1.5],[-30,28,1.3],[-10,-30,1.1]] as number[][]){sphere(world,edgeStone,1,x,.38,z,s,.55*s,s*.8);sphere(world,leaf,.7,x+1.2,.25,z+.5,1,.6,1);}
     box(island,edgeStone,24,.5,21,0,-.21,0);box(island,grass,23.8,.12,20.8,0,.07,0);
     // Crisp travertine edges, an inset pool, and staggered pavers.
     box(island,stone,10.3,.13,9.2,2.9,.16,3.2);
@@ -276,13 +276,18 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect,on
     const starsPositions=new Float32Array(230*3);for(let i=0;i<230;i++)starsPositions.set([(rand()-.5)*140,20+rand()*65,-30-rand()*65],i*3);
     const starsGeometry=new THREE.BufferGeometry();starsGeometry.setAttribute('position',new THREE.BufferAttribute(starsPositions,3));
     const stars=new THREE.Points(starsGeometry,new THREE.PointsMaterial({color:'#e8e8d1',size:.11,transparent:true,opacity:.8}));scene.add(stars);
-    let currentView=latest.current.view,desiredExplode=latest.current.explode,actualExplode=desiredExplode,transition=true;
+    let currentView=latest.current.view,desiredExplode=latest.current.explode,actualExplode=desiredExplode,transition=true,entranceStarted=false,gateOpen=0;
     const desiredCamera=new THREE.Vector3(),desiredTarget=new THREE.Vector3();
     const sunTarget=new THREE.Color(),fogTarget=new THREE.Color();let ambientTarget=1.15,sunIntensity=3.35,exposureTarget=1.02;
     function setView(v:Props['view']){
       currentView=v;transition=true;const narrow=container.clientWidth<650,aspect=container.clientWidth/Math.max(container.clientHeight,1);
+      camera.fov=v==='entry'&&narrow?54:38;camera.updateProjectionMatrix();
       controls.maxDistance=350;controls.minDistance=v==='map'?30:5;
-      if(v==='map'){
+      if(v==='entry'){
+        if(entranceStarted){desiredCamera.set(narrow?8:10.5,3.35,narrow?55:43);desiredTarget.set(4.5,1.9,25);}
+        else{desiredCamera.set(narrow?10:12,3.5,narrow?63:50);desiredTarget.set(5,2,29);}
+        controls.minDistance=7;controls.maxDistance=70;
+      }else if(v==='map'){
         const fit=Math.max(1,.98/aspect);desiredCamera.set(72*fit,65*fit,87*fit);desiredTarget.set(-1,1,0);
       }else if(v==='workshop'){
         desiredCamera.set(narrow?37:34,narrow?9:6.3,narrow?12:6.5);desiredTarget.set(26,1.35,-4);
@@ -318,9 +323,14 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect,on
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
     const up=(event:PointerEvent)=>{if(currentView!=='workshop'||Math.hypot(event.clientX-pointerStart.x,event.clientY-pointerStart.y)>6)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const roots=displayCar?[displayCar.group,...(engineRoot.visible?[engineRoot]:[])]:[car.group];const hits=raycaster.intersectObjects(roots,true);if(hits.length){let node:THREE.Object3D|null=hits[0].object;while(node&&!node.userData.part)node=node.parent;if(node?.userData.part)latest.current.onPartSelect?.(node.userData.part);}};
     renderer.domElement.addEventListener('pointerdown',down);renderer.domElement.addEventListener('pointerup',up);
-    let stopped=false,frame=0,lastTime=0;
+    let stopped=false,frame=0,lastTime=0,hasDrawnFrame=false;
     const render=(time:number)=>{
       if(stopped)return;frame=requestAnimationFrame(render);const delta=Math.min((time-lastTime)/1000,.05)||.016;lastTime=time;
+      if(!latest.current.active&&hasDrawnFrame&&!readyPending)return;
+      if(latest.current.active){
+        gateOpen=THREE.MathUtils.lerp(gateOpen,1,1-Math.exp(-delta*1.4));worldDetails.setGateOpen(gateOpen);
+        if(currentView==='entry'&&!entranceStarted){entranceStarted=true;setView('entry');if(matchMedia('(prefers-reduced-motion: reduce)').matches){camera.position.copy(desiredCamera);controls.target.copy(desiredTarget);gateOpen=1;worldDetails.setGateOpen(1);transition=false;}}
+      }
       if(transition){camera.position.lerp(desiredCamera,1-Math.exp(-delta*3.2));controls.target.lerp(desiredTarget,1-Math.exp(-delta*3.2));if(camera.position.distanceTo(desiredCamera)<.025)transition=false;}
       actualExplode=THREE.MathUtils.lerp(actualExplode,desiredExplode,1-Math.exp(-delta*7));
       car.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));
@@ -329,6 +339,7 @@ export default function GardenScene({config,view,explode,onReady,onPartSelect,on
       sunlight.color.lerp(sunTarget,.025);sunlight.intensity=THREE.MathUtils.lerp(sunlight.intensity,sunIntensity,.025);ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,ambientTarget,.025);renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,exposureTarget,.025);
       if(rain.visible){const points=rainGeometry.attributes.position.array as Float32Array;for(let i=0;i<rainCount;i++){points[i*6+1]-=delta*9;points[i*6+4]-=delta*9;if(points[i*6+1]<0){points[i*6+1]+=17;points[i*6+4]+=17;}}rainGeometry.attributes.position.needsUpdate=true;}
       controls.update();renderer.render(scene,camera);
+      hasDrawnFrame=true;
       if(readyPending){readyPending=false;latest.current.onLoadingProgress?.(100,'欢迎回家。');latest.current.onReady?.();}
       const placed:{x:number;y:number;width:number;height:number}[]=[];
       DESTINATIONS.forEach(place=>{
