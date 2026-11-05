@@ -45,3 +45,80 @@
 .assembly-controls{position:absolute;z-index:6;top:20%;right:9%;display:flex;align-items:center;gap:23px}.assembly-status{display:grid;grid-template-columns:5px auto;gap:6px 9px;align-items:center;color:#3e5b6e;font-size:10px;letter-spacing:1px}.assembly-status i{width:5px;height:5px;background:#c32b43;border-radius:50%}.assembly-status small{grid-column:2;font-size:6px;letter-spacing:1.3px;color:#7d8f9b}.assembly-controls button{border:1px solid #7e95a440;background:#f4f7f8bd;color:#4a6679;font-size:9px;letter-spacing:.3px;padding:9px 12px;backdrop-filter:blur(12px);border-radius:2px;pointer-events:auto}.assembly-controls button:hover{background:#fff;border-color:#b42b3e;color:#a5293b}.assembly-controls button>span{font-size:15px;vertical-align:-1px;margin-right:4px}
 .signin-modal{background:#e7ecef;border-color:#fff9;color:#334e60}.signin-modal .modal-heading h2{color:#2d485b}.signin-modal .modal-heading .eyebrow,.signin-modal .icon-button{color:#657d8e}.signin-modal .garage-showroom{background:#e7ebed}.signin-modal .garage-showroom-fade{background:linear-gradient(180deg,#e7ecef66,transparent 20%,transparent 70%,#e7ecef)}.signin-modal-copy .modal-copy{color:#607889}.signin-benefits{color:#6c8494}.signin-modal .assembly-controls{top:5%;left:30px;right:auto;gap:18px}.signin-modal .assembly-status{font-size:8px}.signin-modal .assembly-status small{font-size:5px}.signin-modal .assembly-controls button{font-size:8px;padding:6px 9px}
 @media(max-width:760px){.arrival-cinematic .garage-showroom-fade{background:linear-gradient(180deg,#e9edefb3,transparent 23%,transparent 65%,#e1e7ebe6),linear-gradient(90deg,#e9edef44,transparent)}.arrival-cinematic .assembly-controls{top:18%;right:22%;flex-direction:column;align-items:flex-end;gap:9px}.arrival-cinematic .assembly-status{font-size:8px}.arrival-cinematic .assembly-status small{font-size:5px}.arrival-cinematic .assembly-controls button{font-size:8px;padding:6px 9px}.signin-modal .assembly-controls{left:23px}}
+
+/* Mission S editorial showcase */
+.mission-arrival {
+  background: #eeefec;
+  color: #161a1b;
+}
+.mission-showcase {
+  position: relative;
+  display: grid;
+  margin: 0;
+  overflow: hidden;
+  background: #d8dbd8;
+  color: #fff;
+}
+.mission-showcase img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.mission-arrival .mission-showcase {
+  position: absolute;
+  inset: 12% 0 10% 38%;
+}
+.mission-media-caption {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 22px clamp(14px, 3vw, 40px);
+  background: linear-gradient(transparent, #151918d9);
+  font-size: 10px;
+  letter-spacing: .14em;
+}
+.mission-media-caption a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  background: #171b1bc4;
+  border: 1px solid #ffffff80;
+  letter-spacing: .04em;
+}
+.mission-media-caption a:hover { background: #353b3b; }
+.mission-arrival .cinematic-copy h2 {
+  font-family: "Aptos", "Helvetica Neue", Arial, sans-serif;
+  font-size: clamp(56px, 9.2vw, 150px);
+  font-weight: 750;
+  line-height: .82;
+  letter-spacing: -.07em;
+  color: #151919;
+}
+.mission-arrival .cinematic-copy h2 span { color: #474e4b; }
+.mission-arrival .cinematic-description { color: #4d5553; }
+.mission-signin { background: #eeefec; }
+.mission-signin .mission-showcase { height: clamp(165px, 33vh, 300px); }
+.mission-signin .modal-heading h2 {
+  font-family: "Aptos", "Helvetica Neue", Arial, sans-serif;
+  font-size: clamp(26px, 4vw, 39px);
+  font-weight: 700;
+  color: #151919;
+}
+.mission-signin .signin-modal-copy { padding-top: 14px; }
+.mission-signin .mission-media-caption { padding-block: 12px; }
+
+@media (max-width: 760px) {
+  .mission-arrival .mission-showcase { inset: 21% 0 29%; }
+  .mission-arrival .cinematic-copy { top: 9%; bottom: 9%; }
+  .mission-arrival .cinematic-copy h2 { font-size: clamp(42px, 10vw, 68px); }
+  .mission-arrival .cinematic-copy h2 br { display: none; }
+  .mission-arrival .cinematic-copy h2 span { margin-left: .2em; }
+  .mission-arrival .cinematic-description { display: none; }
+  .mission-media-caption { padding-block: 12px; font-size: 8px; }
+}
