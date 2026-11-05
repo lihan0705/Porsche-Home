@@ -94,10 +94,10 @@
 .mission-media-caption a:hover { background: #353b3b; }
 .mission-arrival .cinematic-copy h2 {
   font-family: "Aptos", "Helvetica Neue", Arial, sans-serif;
-  font-size: clamp(56px, 9.2vw, 150px);
+  font-size: clamp(48px, 6.8vw, 104px);
   font-weight: 750;
   line-height: .82;
-  letter-spacing: -.07em;
+  letter-spacing: -.035em;
   color: #151919;
 }
 .mission-arrival .cinematic-copy h2 span { color: #474e4b; }

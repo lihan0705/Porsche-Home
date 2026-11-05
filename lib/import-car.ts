@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import type { CarPart } from './car-geometry';
 
 export type DisplayCar = {
@@ -23,6 +22,8 @@ function splitSide(source:THREE.BufferGeometry,side:number) {
 
 /** Runtime assembly of the attributed CC BY-SA model; the source GLB is kept unchanged. */
 export async function loadDisplayCar(color:string,onProgress?:(fraction:number)=>void):Promise<DisplayCar> {
+  // The decoder resolves browser asset URLs when its module is loaded.
+  const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
   const draco=new DRACOLoader();draco.setDecoderPath('/models/draco/');
   const loader=new GLTFLoader();loader.setDRACOLoader(draco);
   let gltf;
