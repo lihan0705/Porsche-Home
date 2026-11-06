@@ -202,8 +202,11 @@
   height: 100%;
   pointer-events: none;
 }
-.mission-lamp { mix-blend-mode: screen; animation: mission-lamp-on 1.55s ease-out both; }
-.mission-lamp-shade { animation: mission-lamp-uncover .95s ease-in both; }
+.mission-showcase > img { filter: brightness(.055); }
+.mission-showcase[data-photo-ready="true"] > img {
+  animation: mission-reveal 4.4s ease-in-out both;
+}
+.mission-lamp { mix-blend-mode: screen; animation: mission-lamp-on 4.4s ease-in-out both; }
 .mission-lamp-1 { animation-delay: .12s; }
 .mission-running-lights {
   fill: none;
@@ -211,16 +214,17 @@
   stroke-width: 4;
   stroke-linecap: round;
   filter: drop-shadow(0 0 6px #c4eaff);
-  animation: mission-lamp-on 1.45s .28s ease-out both;
+  animation: mission-lamp-on 4.4s .25s ease-in-out both;
 }
 @keyframes mission-lamp-on {
-  0%, 16% { opacity: 0; }
-  54% { opacity: 1; }
-  100% { opacity: .46; }
-}
-@keyframes mission-lamp-uncover {
-  0%, 18% { opacity: 1; }
+  0%, 10% { opacity: 0; }
+  36%, 59% { opacity: .94; }
   100% { opacity: 0; }
+}
+@keyframes mission-reveal {
+  0%, 47% { filter: brightness(.055); }
+  69% { filter: brightness(.33); }
+  100% { filter: brightness(1); }
 }
 .mission-gauge {
   position: absolute;
@@ -240,7 +244,8 @@
   .mission-gauge { bottom: 56px; width: 62px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mission-lamp, .mission-running-lights { animation: none; opacity: .46; }
-  .mission-lamp-shade { animation: none; opacity: 0; }
+  .mission-showcase > img,
+  .mission-showcase[data-photo-ready="true"] > img { animation: none; filter: none; }
+  .mission-lamp, .mission-running-lights { animation: none; opacity: 0; }
   .mission-gauge-needle { transition: none; }
 }

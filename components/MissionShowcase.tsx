@@ -39,18 +39,13 @@ export default function MissionShowcase({ compact = false, progress }: { compact
     ? [{ x: 344, y: 155, rx: 24, ry: 11 }, { x: 635, y: 180, rx: 31, ry: 17 }]
     : [{ x: 567, y: 435, rx: 42, ry: 36 }, { x: 1067, y: 451, rx: 42, ry: 36 }];
   return (
-    <figure className="mission-showcase">
+    <figure className="mission-showcase" data-photo-ready={imageReady}>
       <img ref={photo} src={compact ? profile : front} alt={compact ? '保时捷 Mission S 概念车外观' : '保时捷 Mission S 概念车正面'}
         fetchPriority={compact ? 'auto' : 'high'} onLoad={() => setImageReady(true)} />
       {imageReady && (
         <svg className="mission-ignition" viewBox={compact ? '0 0 1280 549' : '0 0 1600 800'}
           preserveAspectRatio="xMidYMid slice" aria-hidden="true">
           <defs>
-            <radialGradient id={`${bloomId}-shade`}>
-              <stop stopColor="#141d21" stopOpacity=".89" />
-              <stop offset=".65" stopColor="#141d21" stopOpacity=".45" />
-              <stop offset="1" stopColor="#141d21" stopOpacity="0" />
-            </radialGradient>
             <radialGradient id={bloomId}>
               <stop stopColor="#f7fdff" stopOpacity=".92" />
               <stop offset=".34" stopColor="#d3edff" stopOpacity=".48" />
@@ -58,11 +53,12 @@ export default function MissionShowcase({ compact = false, progress }: { compact
             </radialGradient>
           </defs>
           {lamps.map(({ x, y, rx, ry }, index) => (
-            <ellipse key={`shade-${x}`} className={`mission-lamp-shade mission-lamp-${index}`} cx={x} cy={y} rx={rx} ry={ry}
-              fill={`url(#${bloomId}-shade)`} />
-          ))}
-          {lamps.map(({ x, y, rx, ry }, index) => (
-            <ellipse key={x} className={`mission-lamp mission-lamp-${index}`} cx={x} cy={y} rx={rx} ry={ry} fill={`url(#${bloomId})`} />
+            <g key={x} className={`mission-lamp mission-lamp-${index}`}>
+              <ellipse cx={x} cy={y} rx={rx * 1.4} ry={ry * 1.4} fill={`url(#${bloomId})`} />
+              {[[-.27, -.24], [.27, -.24], [-.27, .24], [.27, .24]].map(([dx, dy]) => (
+                <circle key={`${dx},${dy}`} cx={x + dx * rx} cy={y + dy * ry} r={rx * .105} fill="#f8fbff" />
+              ))}
+            </g>
           ))}
           {!compact && <g className="mission-running-lights">
             <path d="M500 477 Q523 493 563 512 M1064 540 Q1100 523 1118 502" />
