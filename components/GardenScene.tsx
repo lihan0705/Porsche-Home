@@ -8,9 +8,11 @@ import type { HomeConfig } from '../lib/home-config';
 import { createConceptCar } from '../lib/car-geometry';
 import { loadDisplayCar, type DisplayCar } from '../lib/import-car';
 import { addWorldDetails } from '../lib/world-details';
+import type { PetKind } from '../lib/demo-world';
+import { makeGardenPet } from '../lib/garden-pet';
 
 export type ScenePlace = 'entry'|'map'|'home'|'workshop'|'memories'|'terrace';
-type Props = {config:HomeConfig; view:ScenePlace; explode:number; active?:boolean; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
+type Props = {config:HomeConfig; view:ScenePlace; explode:number; pet?:PetKind; active?:boolean; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
 type Runtime = {setConfig:(config:HomeConfig)=>void; setView:(view:Props['view'])=>void; setExplode:(n:number)=>void};
 const DESTINATIONS: {id:Exclude<ScenePlace,'map'|'entry'>;name:string;subtitle:string;position:[number,number,number]}[] = [
   {id:'home',name:'庭院之家',subtitle:'YOUR HOME',position:[-2,6,-4]},
@@ -19,10 +21,10 @@ const DESTINATIONS: {id:Exclude<ScenePlace,'map'|'entry'>;name:string;subtitle:s
   {id:'terrace',name:'来客露台',subtitle:'GUEST TERRACE',position:[-21,4.2,18]},
 ];
 
-export default function GardenScene({config,view,explode,active=true,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
+export default function GardenScene({config,view,explode,pet='none',active=true,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
   const host=useRef<HTMLDivElement>(null), runtime=useRef<Runtime|null>(null);
   const hotspots=useRef<Record<string,HTMLButtonElement|null>>({});
-  const latest=useRef({config,view,explode,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
+  const latest=useRef({config,view,explode,pet,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,pet,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
   useEffect(()=>{
     if(!host.current)return;
     const container=host.current;
@@ -110,6 +112,17 @@ export default function GardenScene({config,view,explode,active=true,onReady,onP
       box(pavilion,brass,1.2,.045,.03,x,1.03,-2.69);box(pavilion,warmGlow,1.85,.035,.055,x,3.91,-2.63);
     }
     cylinder(pavilion,wood,.65,.1,0,.95,1.1,32);cylinder(pavilion,dark,.12,.55,0,.65,1.1,12);
+    // The collectible case anchors the gallery beside the owner's memory frames.
+    box(pavilion, dark, 2.35, .65, 1.45, 2.5, .69, 1.9);
+    box(pavilion, brass, 2.45, .055, 1.55, 2.5, 1.04, 1.9);
+    const collectible = createConceptCar('#8d3038').group;
+    collectible.scale.setScalar(.29);
+    collectible.position.set(2.5, 1.075, 1.9);
+    collectible.rotation.y = Math.PI / 3;
+    pavilion.add(collectible);
+    box(pavilion, glass, 2.42, .035, 1.52, 2.5, 1.63, 1.9);
+    for (const x of [1.3, 3.7]) box(pavilion, glass, .025, .57, 1.52, x, 1.34, 1.9);
+    for (const z of [1.15, 2.65]) box(pavilion, glass, 2.42, .57, .025, 2.5, 1.34, z);
     box(pavilion,woodLight,2.1,.19,.55,-2.5,.73,2.3);for(const x of[-3.3,-1.7])box(pavilion,dark,.07,.4,.4,x,.46,2.3);
     glow(pavilion,0,4.1,-1.3,6);box(pavilion,stone,5,.12,1,0,.19,5.2);box(pavilion,stone,5.6,.1,1,0,.07,6.1);
     // A separate garden terrace is the social address: chairs, tea, cards and a mailbox.
@@ -256,13 +269,31 @@ export default function GardenScene({config,view,explode,active=true,onReady,onP
     for(let i=0;i<140;i++){dummy.position.set(-10.1+rand()*1.3,.19,-9+rand()*18);dummy.scale.set(1+rand(),.5,1+rand());dummy.updateMatrix();pebbles.setMatrixAt(i,dummy.matrix);}island.add(pebbles);
     const car=createConceptCar(latest.current.config.carColor);car.group.position.set(3.12,.255,4.3);car.group.rotation.y=-.06;island.add(car.group);
     const worldDetails=addWorldDetails(world,island);
+    const pets = { cat: makeGardenPet('cat'), dog: makeGardenPet('dog') };
+    for (const animal of Object.values(pets)) {
+      animal.group.visible = false;
+      island.add(animal.group);
+    }
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     latest.current.onLoadingProgress?.(35,'正在唤醒你的 911');
     let displayCar:DisplayCar|null=null;
+    const guideMaterial = new THREE.LineDashedMaterial({ color: '#d87c60', dashSize: .1, gapSize: .08, transparent: true, opacity: .85, depthWrite: false });
+    const guides: { part: DisplayCar['parts'][number]; line: THREE.Line; anchor: THREE.Vector3 }[] = [];
     let readyPending=false;
     const engineRoot=new THREE.Group();engineRoot.position.copy(car.group.position);engineRoot.rotation.copy(car.group.rotation);engineRoot.visible=false;island.add(engineRoot);
     loadDisplayCar(latest.current.config.carColor,fraction=>{if(!stopped)latest.current.onLoadingProgress?.(38+Math.min(1,fraction)*47,'正在载入 911 Carrera 4S');}).then(loaded=>{
       if(stopped){loaded.group.traverse(n=>{if(n instanceof THREE.Mesh)n.geometry.dispose();});return;}
       displayCar=loaded;loaded.group.position.copy(car.group.position);loaded.group.rotation.copy(car.group.rotation);island.add(loaded.group);car.group.visible=false;
+      for (const part of loaded.parts) {
+        const anchor = new THREE.Box3().setFromObject(part.group).getCenter(new THREE.Vector3());
+        loaded.group.worldToLocal(anchor);
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([anchor, anchor]), guideMaterial);
+        line.geometry.setAttribute('lineDistance', new THREE.BufferAttribute(new Float32Array(2), 1));
+        line.visible = false;
+        line.frustumCulled = false;
+        loaded.group.add(line);
+        guides.push({ part, line, anchor });
+      }
       const engine=car.parts.find(p=>p.group.userData.part==='powertrain');if(engine){car.group.remove(engine.group);engineRoot.add(engine.group);}
       loaded.paint.color.set(latest.current.config.carColor);loaded.rims.forEach(m=>m.color.set(latest.current.config.wheels==='black'?'#353a36':'#c0c5c3'));
       container.dataset.carModel='carrera-4s';
@@ -327,6 +358,11 @@ export default function GardenScene({config,view,explode,active=true,onReady,onP
     const render=(time:number)=>{
       if(stopped)return;frame=requestAnimationFrame(render);const delta=Math.min((time-lastTime)/1000,.05)||.016;lastTime=time;
       if(!latest.current.active&&hasDrawnFrame&&!readyPending)return;
+      for (const kind of ['cat', 'dog'] as const) {
+        const animal = pets[kind];
+        animal.group.visible = latest.current.pet === kind;
+        if (animal.group.visible && !reducedMotion) animal.tail.rotation.y = Math.sin(time * .004) * .42;
+      }
       if(latest.current.active){
         gateOpen=THREE.MathUtils.lerp(gateOpen,1,1-Math.exp(-delta*1.4));worldDetails.setGateOpen(gateOpen);
         if(currentView==='entry'&&!entranceStarted){entranceStarted=true;setView('entry');if(matchMedia('(prefers-reduced-motion: reduce)').matches){camera.position.copy(desiredCamera);controls.target.copy(desiredTarget);gateOpen=1;worldDetails.setGateOpen(1);transition=false;}}
@@ -335,6 +371,17 @@ export default function GardenScene({config,view,explode,active=true,onReady,onP
       actualExplode=THREE.MathUtils.lerp(actualExplode,desiredExplode,1-Math.exp(-delta*7));
       car.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));
       displayCar?.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));engineRoot.visible=!!displayCar&&currentView==='workshop'&&actualExplode>.08;
+      for (const { part, line, anchor } of guides) {
+        line.visible = currentView === 'workshop' && actualExplode > .09;
+        if (!line.visible) continue;
+        const shift = part.offset;
+        const position = line.geometry.getAttribute('position');
+        position.setXYZ(1, anchor.x + shift.x * actualExplode, anchor.y + shift.y * actualExplode, anchor.z + shift.z * actualExplode);
+        position.needsUpdate = true;
+        const distance = line.geometry.getAttribute('lineDistance');
+        distance.setX(1, shift.length() * actualExplode);
+        distance.needsUpdate = true;
+      }
       scene.background instanceof THREE.Color&&scene.background.lerp(fogTarget,.025);if(scene.fog instanceof THREE.Fog)scene.fog.color.copy(scene.background as THREE.Color);
       sunlight.color.lerp(sunTarget,.025);sunlight.intensity=THREE.MathUtils.lerp(sunlight.intensity,sunIntensity,.025);ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,ambientTarget,.025);renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,exposureTarget,.025);
       if(rain.visible){const points=rainGeometry.attributes.position.array as Float32Array;for(let i=0;i<rainCount;i++){points[i*6+1]-=delta*9;points[i*6+4]-=delta*9;if(points[i*6+1]<0){points[i*6+1]+=17;points[i*6+4]+=17;}}rainGeometry.attributes.position.needsUpdate=true;}
@@ -357,7 +404,7 @@ export default function GardenScene({config,view,explode,active=true,onReady,onP
       });
     };
     frame=requestAnimationFrame(render);
-    return()=>{stopped=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',down);renderer.domElement.removeEventListener('pointerup',up);scene.traverse(node=>{if(node instanceof THREE.Mesh||node instanceof THREE.Points||node instanceof THREE.LineSegments){node.geometry.dispose();const mats=Array.isArray(node.material)?node.material:[node.material];mats.forEach(m=>m.dispose());}});worldDetails.dispose();environment.dispose();renderer.dispose();renderer.domElement.remove();runtime.current=null;};
+    return()=>{stopped=true;cancelAnimationFrame(frame);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',down);renderer.domElement.removeEventListener('pointerup',up);scene.traverse(node=>{if(node instanceof THREE.Mesh||node instanceof THREE.Points||node instanceof THREE.Line){node.geometry.dispose();const mats=Array.isArray(node.material)?node.material:[node.material];mats.forEach(m=>m.dispose());}});guideMaterial.dispose();worldDetails.dispose();environment.dispose();renderer.dispose();renderer.domElement.remove();runtime.current=null;};
   },[]);
   useEffect(()=>{runtime.current?.setConfig(config);},[config]);
   useEffect(()=>{runtime.current?.setView(view);},[view]);
