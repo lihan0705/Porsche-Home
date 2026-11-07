@@ -50,8 +50,8 @@ export function FriendsPanel({ friends, current, onToggle }: { friends: Friend[]
     </button>}
     <h3>我的好友 <small>{friends.length}</small></h3>
     {friends.length ? <div className="prototype-list">{friends.map(friend => <FriendRow key={friend.key} friend={friend} saved onToggle={onToggle} />)}</div> : <p className="modal-copy">先去朋友家做客，再把它加进列表。收藏保存在当前浏览器。</p>}
-    <h3><Globe2 size={16} /> 跨地区车友</h3>
-    <p className="fine-print">三个示范庭院，模拟不同地区的车友社区。</p>
+    <h3><Globe2 size={16} /> 车友与品牌园区</h3>
+    <p className="fine-print">拜访车友庭院，也可以探索保时捷办公与研发园区概念场景。</p>
     <div className="prototype-list">{sampleFriends.map(friend => <FriendRow key={friend.key} friend={friend} saved={friends.some(item => item.key === friend.key)} onToggle={onToggle} />)}</div>
   </div>;
 }

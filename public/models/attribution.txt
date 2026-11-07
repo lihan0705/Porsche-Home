@@ -22,3 +22,17 @@ assembly. Interactive disassembly is an illustrative grouping demonstration.
 License checked against the original Sketchfab creator listing and the PlayCanvas
 documentation on 2026-11-04. Some third-party mirrors incorrectly describe the model
 as CC BY only; the original creator listing specifies Attribution-ShareAlike.
+
+42096 Porsche 911 RSR digital model by Philippe Hurbain (Philo), CC BY 2.0.
+Source: https://library.ldraw.org/omr/sets/930
+Model license: https://creativecommons.org/licenses/by/2.0/
+Geometry uses contributors' LDraw Parts Library, CC BY 2.0 / CC BY 4.0 per part.
+Library: https://library.ldraw.org/
+Licensing and contributor attribution: https://www.ldraw.org/legal-info.html
+License: https://creativecommons.org/licenses/by/4.0/
+Changes: converted to glTF, normalized for the workshop, and grouped for animation.
+Official kit instructions: https://www.lego.com/en-us/service/building-instructions/42096
+
+Building signage uses the Porsche wordmark outline from Porsche Design System,
+recolored red for the architectural scene:
+https://designsystem.porsche.com/v4/components/wordmark/configurator/

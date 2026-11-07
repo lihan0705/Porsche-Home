@@ -34,27 +34,27 @@ export async function loadDisplayCar(color:string,onProgress?:(fraction:number)=
   const translation=new THREE.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z);
   normalization.multiply(translation);
   const group=new THREE.Group(),parts:CarPart[]=[],rims:THREE.MeshStandardMaterial[]=[];
-  const paint=new THREE.MeshPhysicalMaterial({color,metalness:.64,roughness:.24,clearcoat:1,clearcoatRoughness:.1});
+  const paint=new THREE.MeshPhysicalMaterial({color,metalness:.64,roughness:.24,clearcoat:1,clearcoatRoughness:.1,side:THREE.DoubleSide});
   const buckets=new Map<string,THREE.Group>();
   function bucket(key:string,delta:THREE.Vector3){let b=buckets.get(key);if(!b){b=new THREE.Group();b.userData.part=key.split(':')[0];group.add(b);parts.push({group:b,origin:new THREE.Vector3(),offset:delta});buckets.set(key,b);}return b;}
   source.traverse(node=>{
     if(!(node instanceof THREE.Mesh))return;
     const original=node.material as THREE.MeshStandardMaterial;
-    if(original.name==='coat')return; // The physical paint material carries this clear coat without a second shell.
     const baked=node.geometry.clone().applyMatrix4(node.matrixWorld).applyMatrix4(normalization);
     const ancestor=node.parent?.name??node.name;const name=ancestor.toLowerCase();
     const wheel=name.includes('cylinder');
     let material:THREE.MeshStandardMaterial=original.clone();
-    if(original.name==='paint')material=paint;
+    if(original.name==='paint'||original.name==='coat')material=paint;
     else if(original.name==='rubber'){material.metalness=0;material.roughness=.88;}
     else if(original.name==='full_black'){material.metalness=.02;material.roughness=.64;}
     if(wheel&&original.name==='silver'){material.metalness=.85;material.roughness=.24;rims.push(material);}
     const add=(geometry:THREE.BufferGeometry,parent:THREE.Group)=>{const display=new THREE.Mesh(geometry,material);display.castShadow=true;display.receiveShadow=true;parent.add(display);};
     if(wheel){
-      for(const side of[-1,1])add(splitSide(baked,side),bucket(`wheels:${name}:${side}`,new THREE.Vector3(side*.85,.08,name.includes('001')?.15:-.15)));
+      for(const side of[-1,1])add(splitSide(baked,side),bucket(`wheels:${name}:${side}`,new THREE.Vector3(side*1.35,.12,name.includes('001')?.34:-.34)));
       baked.dispose();
     }else if(original.name==='window'||name.includes('window')||name.includes('windshield'))add(baked,bucket('glass',new THREE.Vector3(0,2.5,-.1)));
-    else if(original.name==='paint'||name.includes('bumper')||['license','logo','tex_shiny','lights','glass'].includes(original.name))add(baked,bucket('body',new THREE.Vector3(0,1.5,0)));
+    else if(name.startsWith('bumper_front'))add(baked,bucket('body:front',new THREE.Vector3(0,.6,1.45)));
+    else if(original.name==='paint'||original.name==='coat'||['license','logo','tex_shiny','lights','glass'].includes(original.name))add(baked,bucket('body',new THREE.Vector3(0,1.65,0)));
     else add(baked,bucket('chassis',new THREE.Vector3(0,.12,0)));
   });
   // Cloned materials retain the GLB's texture objects; geometries and the source material shells can be released.

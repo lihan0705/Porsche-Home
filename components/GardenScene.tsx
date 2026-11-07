@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { HomeConfig } from '../lib/home-config';
+import { workshopModels, type WorkshopExhibit } from '../lib/workshop-catalog';
+import { createMechanicalAssembly } from '../lib/mechanical-assembly';
 import { createConceptCar } from '../lib/car-geometry';
 import { loadDisplayCar, type DisplayCar } from '../lib/import-car';
 import { addWorldDetails } from '../lib/world-details';
@@ -12,7 +14,7 @@ import type { PetKind } from '../lib/demo-world';
 import { makeGardenPet } from '../lib/garden-pet';
 
 export type ScenePlace = 'entry'|'map'|'home'|'workshop'|'memories'|'terrace';
-type Props = {config:HomeConfig; view:ScenePlace; explode:number; pet?:PetKind; active?:boolean; onReady?:()=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
+type Props = {config:HomeConfig; view:ScenePlace; workshopModelId?:string; campus?:string; explode:number; pet?:PetKind; active?:boolean; onReady?:()=>void; onExhibitStatus?:(status:'loading'|'ready'|'error')=>void; onPartSelect?:(part:string)=>void; onPlaceSelect?:(place:ScenePlace)=>void; onLoadingProgress?:(value:number,stage:string)=>void};
 type Runtime = {setConfig:(config:HomeConfig)=>void; setView:(view:Props['view'])=>void; setExplode:(n:number)=>void};
 const DESTINATIONS: {id:Exclude<ScenePlace,'map'|'entry'>;name:string;subtitle:string;position:[number,number,number]}[] = [
   {id:'home',name:'庭院之家',subtitle:'YOUR HOME',position:[-2,6,-4]},
@@ -21,10 +23,10 @@ const DESTINATIONS: {id:Exclude<ScenePlace,'map'|'entry'>;name:string;subtitle:s
   {id:'terrace',name:'来客露台',subtitle:'GUEST TERRACE',position:[-21,4.2,18]},
 ];
 
-export default function GardenScene({config,view,explode,pet='none',active=true,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
+export default function GardenScene({config,view,workshopModelId,campus,explode,pet='none',active=true,onReady,onExhibitStatus,onPartSelect,onPlaceSelect,onLoadingProgress}:Props) {
   const host=useRef<HTMLDivElement>(null), runtime=useRef<Runtime|null>(null);
   const hotspots=useRef<Record<string,HTMLButtonElement|null>>({});
-  const latest=useRef({config,view,explode,pet,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,explode,pet,active,onReady,onPartSelect,onPlaceSelect,onLoadingProgress};
+  const latest=useRef({config,view,workshopModelId,campus,explode,pet,active,onReady,onExhibitStatus,onPartSelect,onPlaceSelect,onLoadingProgress}); latest.current={config,view,workshopModelId,campus,explode,pet,active,onReady,onExhibitStatus,onPartSelect,onPlaceSelect,onLoadingProgress};
   useEffect(()=>{
     if(!host.current)return;
     const container=host.current;
@@ -56,17 +58,78 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     function line(parent:THREE.Object3D,material:THREE.Material,a:THREE.Vector3,b:THREE.Vector3,r=.05){const v=b.clone().sub(a);const m=cylinder(parent,material,r,v.length());m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());return m;}
     let seed=83;function rand(){seed=(seed*16807)%2147483647;return(seed-1)/2147483646;}
     const terrain=new THREE.Group();scene.add(terrain);
-    const ground=mesh(new THREE.CircleGeometry(150,80),standard('#899577'),terrain,0,-.49,0,false);ground.rotation.x=-Math.PI/2;
-    // A horizon of quiet rolling hills gives the tiny home a larger world.
-    for(let i=0;i<17;i++) {const a=i/17*Math.PI*2;const hill=sphere(terrain,standard(i%2?'#879776':'#94a183'),1,Math.cos(a)*(47+rand()*14),-3.6,Math.sin(a)*(48+rand()*12),10+rand()*11,6+rand()*8,9+rand()*12);hill.castShadow=false;}
+    const terrainHeight=(x:number,z:number)=>{
+      const radius=Math.hypot(x/45,z/37);
+      const edge=THREE.MathUtils.smoothstep(radius,1,1.55);
+      const approach=1-THREE.MathUtils.smoothstep(Math.abs(x-6),4,13)
+        *THREE.MathUtils.smoothstep(z,27,40)*(1-THREE.MathUtils.smoothstep(z,56,69));
+      const ridge=5.8*Math.exp(-((x-46)**2/850+(z+34)**2/740));
+      const basin=-3.7*Math.exp(-((x+46)**2/650+(z-17)**2/580));
+      return -.025+edge*approach*(ridge+basin+2.2*Math.sin(x*.065)*Math.cos(z*.073));
+    };
+    const groundGeometry=new THREE.PlaneGeometry(200,190,132,126);
+    groundGeometry.rotateX(-Math.PI/2);
+    const groundVertices=groundGeometry.attributes.position;
+    for(let i=0;i<groundVertices.count;i++){
+      groundVertices.setY(i,terrainHeight(groundVertices.getX(i),groundVertices.getZ(i)));
+    }
+    groundGeometry.computeVertexNormals();
+    mesh(groundGeometry,grass,terrain,0,0,0,false).castShadow=false;
+    const horizon=mesh(new THREE.CircleGeometry(330,96),grass,terrain,0,-4.8,0,false);
+    horizon.rotation.x=-Math.PI/2;
+    horizon.castShadow=false;
+
+    // Scatter low meadow plants in patches, leaving the approach and sightlines clear.
+    const meadowPatches=[
+      [-11,10],[-15,22],[-28,10],[-30,-5],[-24,-26],
+      [-11,-24],[3,-19],[14,-15],[23,6],[14,16],[1,21],
+      [-43,13],[-36,-31],[32,-30],[39,21],
+    ];
+    const meadowCount=meadowPatches.length*22;
+    const meadowStems=new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(.022,.034,.53,5),
+      standard('#607a46'),meadowCount,
+    );
+    const meadowBlooms=new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(.16,0),
+      standard('#ffffff'),meadowCount,
+    );
+    const meadowGrasses=new THREE.InstancedMesh(
+      new THREE.ConeGeometry(.14,.7,4),standard('#82945c'),meadowCount,
+    );
+    const flowerColors=['#f5df9b','#f7eee1','#b395c6','#d89491','#eee6bd'];
+    const plant=new THREE.Object3D();
+    const flowerColor=new THREE.Color();
+    let flowerIndex=0;
+    for(const [cx,cz] of meadowPatches){
+      for(let i=0;i<22;i++){
+        const x=cx+(rand()-.5)*5,z=cz+(rand()-.5)*3;
+        const y=terrainHeight(x,z),size=.65+rand()*.8;
+        plant.rotation.set(0,rand()*Math.PI*2,0);
+        plant.scale.setScalar(size);
+        plant.position.set(x,y+.265*size,z);
+        plant.updateMatrix();
+        meadowStems.setMatrixAt(flowerIndex,plant.matrix);
+        plant.scale.set(size,size*.45,size);
+        plant.position.y=y+.53*size;
+        plant.updateMatrix();
+        meadowBlooms.setMatrixAt(flowerIndex,plant.matrix);
+        meadowBlooms.setColorAt(flowerIndex,flowerColor.set(flowerColors[Math.floor(rand()*flowerColors.length)]));
+        const grassX=x+.28,grassZ=z-.21;
+        plant.position.set(grassX,terrainHeight(grassX,grassZ)+.29*size,grassZ);
+        plant.scale.set(.85,size,.85);
+        plant.rotation.z=.22;
+        plant.updateMatrix();
+        meadowGrasses.setMatrixAt(flowerIndex,plant.matrix);
+        flowerIndex++;
+      }
+    }
+    terrain.add(meadowStems,meadowBlooms,meadowGrasses);
     const island=new THREE.Group();scene.add(island);
     const world=new THREE.Group();scene.add(world);
-    // The house is one address in a connected landscape, with several places to discover.
-    const outline=new THREE.Shape();outline.moveTo(-37,-29);outline.bezierCurveTo(-47,-19,-43,12,-34,27);outline.bezierCurveTo(-21,37,4,34,23,29);outline.bezierCurveTo(43,24,47,5,41,-17);outline.bezierCurveTo(36,-32,14,-37,-5,-33);outline.bezierCurveTo(-21,-38,-33,-36,-37,-29);
-    const landscape=mesh(new THREE.ExtrudeGeometry(outline,{depth:.55,bevelEnabled:false,curveSegments:12}),[grass,edgeStone] as unknown as THREE.Material,world,0,-.575,0);landscape.rotation.x=-Math.PI/2;landscape.castShadow=false;
     const pathMat=standard('#b7a88c'),pathEdge=standard('#9c947b');
-    function path(points:[number,number][],width=1.65){
-      const curve=new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,.035,z))),positions:number[]=[],indices:number[]=[];
+    function path(points:[number,number][],width=1.65,closed=false){
+      const curve=new THREE.CatmullRomCurve3(points.map(([x,z])=>new THREE.Vector3(x,.035,z)),closed),positions:number[]=[],indices:number[]=[];
       for(let i=0;i<=70;i++){
         const t=i/70,p=curve.getPoint(t),direction=curve.getTangent(t),normal=new THREE.Vector3(-direction.z,0,direction.x).multiplyScalar(width/2);
         positions.push(p.x+normal.x,p.y,p.z+normal.z,p.x-normal.x,p.y,p.z-normal.z);
@@ -79,11 +142,16 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
         const edging=mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(edgePoints),44,.045,5,false),pathEdge,world);edging.castShadow=false;
       }
     }
-    path([[10,-4],[15,-4],[18,-8],[23,-8]],2.1);
-    path([[-9,-7],[-14,-9],[-16,-12],[-22,-11]],1.9);
-    path([[-5,9],[-9,12],[-12,17],[-18,18]],2);
-    path([[-23,-20],[-15,-26],[2,-25],[17,-23],[27,-15]],1.45);
-    path([[-19,24],[-8,28],[7,25],[20,19],[29,9],[28,1]],1.6);
+    // A continuous garden loop passes the four destinations on their public sides.
+    path([
+      [9,9],[14,12],[22,11],[28,5],[19,-1],[15,-11],
+      [5,-17],[-8,-18],[-15,-13],[-23,-10],[-28,-4],
+      [-29,5],[-25,10],[-16,11],[-11,17],[-1,16],
+    ],1.65,true);
+    path([[9,9],[6,9],[3,8]],1.25);
+    path([[28,5],[27,2],[26,1.6]],1.25);
+    path([[-23,-10],[-22,-11.5]],1.25);
+    path([[-16,11],[-17,12.5]],1.25);
     // A freestanding workshop: the open forecourt keeps all exploded parts in view.
     const workshop=new THREE.Group();workshop.position.set(26,0,-6);world.add(workshop);
     box(workshop,edgeStone,14,.24,16,0,.06,0);box(workshop,stone,13.6,.1,15.6,0,.23,0);
@@ -147,20 +215,20 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     glow(terrace,-.6,3.35,-.6,5);for(const x of[-3.6,2.4])box(terrace,warmGlow,.2,.15,.2,x,3.59,-.6);
     // Reused instanced forest geometry keeps the larger map affordable to render.
     const forestPositions:[number,number,number][]=[];
-    for(let i=0;i<58;i++){
-      const a=i/58*Math.PI*2,r=30+rand()*9;const x=Math.cos(a)*r,z=Math.sin(a)*(25+rand()*7);
-      if((x>17&&z>-15&&z<3)||(x<-15&&z>-23&&z<-8)||(x<-12&&z>10&&z<27))continue;
-      forestPositions.push([x,z,.8+rand()*.65]);
+    // Separate groves frame destinations without forming a continuous border.
+    const groves=[[-32,-29],[-15,-36],[19,-30],[39,-16],[-34,20]];
+    for(const [cx,cz] of groves){
+      for(let i=0;i<6;i++){
+        forestPositions.push([cx+(rand()-.5)*9,cz+(rand()-.5)*7,.72+rand()*.55]);
+      }
     }
-    forestPositions.push([-14,-18,1.2],[-11,-18,.9],[9,-17,1.35],[15,-13,1],[13,10,.9],[-14,5,1.1],[-28,5,1.3],[34,6,1.2],[-32,-10,1.1]);
-    // Keep the desktop and portrait workshop approach clear of foreground canopy.
-    for(let i=forestPositions.length-1;i>=0;i--){const[x,z]=forestPositions[i];if((x>24&&x<43&&z>0&&z<18)||(x>-1&&x<15&&z>23))forestPositions.splice(i,1);}
+    forestPositions.push([-14,-18,1.2],[9,-17,1.35],[13,10,.9],[-14,5,1.1]);
     const forestTrunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.13,.19,2.9,7),wood,forestPositions.length);
     const forestCanopies=new THREE.InstancedMesh(new THREE.ConeGeometry(1.15,2.4,8),leaf,forestPositions.length*3);
     const forestDummy=new THREE.Object3D(),forestColor=new THREE.Color();
     forestPositions.forEach(([x,z,s],i)=>{
-      forestDummy.position.set(x,1.43*s,z);forestDummy.rotation.set(0,0,0);forestDummy.scale.set(s,s,s);forestDummy.updateMatrix();forestTrunks.setMatrixAt(i,forestDummy.matrix);
-      for(let j=0;j<3;j++){forestDummy.position.set(x,(2.15+j*.7)*s,z);forestDummy.rotation.y=i*.63;forestDummy.scale.setScalar(s*(1-j*.17));forestDummy.updateMatrix();forestCanopies.setMatrixAt(i*3+j,forestDummy.matrix);forestColor.set(i%3?'#687f50':'#526b48');forestCanopies.setColorAt(i*3+j,forestColor);}
+      forestDummy.position.set(x,terrainHeight(x,z)+1.43*s,z);forestDummy.rotation.set(0,0,0);forestDummy.scale.set(s,s,s);forestDummy.updateMatrix();forestTrunks.setMatrixAt(i,forestDummy.matrix);
+      for(let j=0;j<3;j++){forestDummy.position.set(x,terrainHeight(x,z)+(2.15+j*.7)*s,z);forestDummy.rotation.y=i*.63;forestDummy.scale.setScalar(s*(1-j*.17));forestDummy.updateMatrix();forestCanopies.setMatrixAt(i*3+j,forestDummy.matrix);forestColor.set(i%3?'#687f50':'#526b48');forestCanopies.setColorAt(i*3+j,forestColor);}
     });forestTrunks.castShadow=true;forestCanopies.castShadow=true;world.add(forestTrunks,forestCanopies);
     for(const[x,z]of[[14,-4],[-13,-9],[-10,13],[-9,-25],[10,-24],[26,-17],[28,10],[9,25],[-13,27]] as number[][]){cylinder(world,dark,.045,1.45,x,.72,z,8);box(world,warmGlow,.22,.085,.22,x,1.48,z);}
     for(const[x,z,s]of[[-31,-21,1.3],[35,-16,1.5],[-30,28,1.3],[-10,-30,1.1]] as number[][]){sphere(world,edgeStone,1,x,.38,z,s,.55*s,s*.8);sphere(world,leaf,.7,x+1.2,.25,z+.5,1,.6,1);}
@@ -267,7 +335,10 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     const pebbleGeo=new THREE.IcosahedronGeometry(.12,0),pebbleMat=standard('#d0c8b4');
     const pebbles=new THREE.InstancedMesh(pebbleGeo,pebbleMat,140);const dummy=new THREE.Object3D();
     for(let i=0;i<140;i++){dummy.position.set(-10.1+rand()*1.3,.19,-9+rand()*18);dummy.scale.set(1+rand(),.5,1+rand());dummy.updateMatrix();pebbles.setMatrixAt(i,dummy.matrix);}island.add(pebbles);
-    const car=createConceptCar(latest.current.config.carColor);car.group.position.set(3.12,.255,4.3);car.group.rotation.y=-.06;island.add(car.group);
+    const vehicleStage=new THREE.Group();
+    scene.add(vehicleStage);
+    const studioColor=new THREE.Color('#f3f4f5');
+    const car=createConceptCar(latest.current.config.carColor);car.group.position.set(3.12,.255,4.3);car.group.rotation.y=-.06;vehicleStage.add(car.group);
     const worldDetails=addWorldDetails(world,island);
     const pets = { cat: makeGardenPet('cat'), dog: makeGardenPet('dog') };
     for (const animal of Object.values(pets)) {
@@ -277,13 +348,20 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     latest.current.onLoadingProgress?.(35,'正在唤醒你的 911');
     let displayCar:DisplayCar|null=null;
-    const guideMaterial = new THREE.LineDashedMaterial({ color: '#d87c60', dashSize: .1, gapSize: .08, transparent: true, opacity: .85, depthWrite: false });
+    const guideMaterial = new THREE.LineDashedMaterial({ color: '#8e6260', dashSize: .09, gapSize: .07, transparent: true, opacity: .85, depthWrite: false });
     const guides: { part: DisplayCar['parts'][number]; line: THREE.Line; anchor: THREE.Vector3 }[] = [];
     let readyPending=false;
-    const engineRoot=new THREE.Group();engineRoot.position.copy(car.group.position);engineRoot.rotation.copy(car.group.rotation);engineRoot.visible=false;island.add(engineRoot);
+    const mechanics=createMechanicalAssembly();
+    const engineRoot=mechanics.group;engineRoot.position.copy(car.group.position);engineRoot.rotation.copy(car.group.rotation);engineRoot.visible=false;vehicleStage.add(engineRoot);
+    const workshopExhibits = new Map<string, WorkshopExhibit>();
+    let activeExhibit: WorkshopExhibit | undefined;
+    let activeModelId: string | undefined;
+    const pendingExhibits = new Map<string, Promise<WorkshopExhibit>>();
+    let cameraFocus: THREE.Vector3 | null = null;
+
     loadDisplayCar(latest.current.config.carColor,fraction=>{if(!stopped)latest.current.onLoadingProgress?.(38+Math.min(1,fraction)*47,'正在载入 911 Carrera 4S');}).then(loaded=>{
       if(stopped){loaded.group.traverse(n=>{if(n instanceof THREE.Mesh)n.geometry.dispose();});return;}
-      displayCar=loaded;loaded.group.position.copy(car.group.position);loaded.group.rotation.copy(car.group.rotation);island.add(loaded.group);car.group.visible=false;
+      displayCar=loaded;loaded.group.position.copy(car.group.position);loaded.group.rotation.copy(car.group.rotation);vehicleStage.add(loaded.group);car.group.visible=false;
       for (const part of loaded.parts) {
         const anchor = new THREE.Box3().setFromObject(part.group).getCenter(new THREE.Vector3());
         loaded.group.worldToLocal(anchor);
@@ -294,11 +372,11 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
         loaded.group.add(line);
         guides.push({ part, line, anchor });
       }
-      const engine=car.parts.find(p=>p.group.userData.part==='powertrain');if(engine){car.group.remove(engine.group);engineRoot.add(engine.group);}
+
       loaded.paint.color.set(latest.current.config.carColor);loaded.rims.forEach(m=>m.color.set(latest.current.config.wheels==='black'?'#353a36':'#c0c5c3'));
       container.dataset.carModel='carrera-4s';
       latest.current.onLoadingProgress?.(96,'正在点亮车库与庭院');readyPending=true;
-    }).catch(()=>{if(stopped)return;container.dataset.carModel='concept-fallback';latest.current.onLoadingProgress?.(96,'概念车型已就绪');readyPending=true;});
+    }).catch((error)=>{if(stopped)return;console.warn('911 model unavailable',error);container.dataset.carModel='concept-fallback';latest.current.onLoadingProgress?.(96,'概念车型已就绪');readyPending=true;});
     // Rain and stars remain light enough for a laptop browser.
     const rainCount=1000,rainPositions=new Float32Array(rainCount*6);
     for(let i=0;i<rainCount;i++){const x=(rand()-.5)*88,y=rand()*17,z=(rand()-.5)*76;rainPositions.set([x,y,z,x-.05,y-.38,z+.02],i*6);}
@@ -311,21 +389,34 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     const desiredCamera=new THREE.Vector3(),desiredTarget=new THREE.Vector3();
     const sunTarget=new THREE.Color(),fogTarget=new THREE.Color();let ambientTarget=1.15,sunIntensity=3.35,exposureTarget=1.02;
     function setView(v:Props['view']){
+      cameraFocus=null;
       currentView=v;transition=true;const narrow=container.clientWidth<650,aspect=container.clientWidth/Math.max(container.clientHeight,1);
-      camera.fov=v==='entry'&&narrow?54:38;camera.updateProjectionMatrix();
+      const studio=v==='workshop';
+      terrain.visible=world.visible=island.visible=true;
+
+      camera.clearViewOffset();
+      if(studio)camera.setViewOffset(container.clientWidth||1,container.clientHeight||1,0,(container.clientHeight||1)*.12,container.clientWidth||1,container.clientHeight||1);
+      camera.fov=v==='entry'?(narrow?54:42):v==='map'?42:38;camera.updateProjectionMatrix();
       controls.maxDistance=350;controls.minDistance=v==='map'?30:5;
       if(v==='entry'){
         if(entranceStarted){desiredCamera.set(narrow?8:10.5,3.35,narrow?55:43);desiredTarget.set(4.5,1.9,25);}
         else{desiredCamera.set(narrow?10:12,3.5,narrow?63:50);desiredTarget.set(5,2,29);}
         controls.minDistance=7;controls.maxDistance=70;
       }else if(v==='map'){
-        const fit=Math.max(1,.98/aspect);desiredCamera.set(72*fit,65*fit,87*fit);desiredTarget.set(-1,1,0);
+        const fit=Math.max(1,.98/aspect);desiredCamera.set(66*fit,58*fit,86*fit);desiredTarget.set(0,1,-4);
       }else if(v==='workshop'){
-        desiredCamera.set(narrow?37:34,narrow?9:6.3,narrow?12:6.5);desiredTarget.set(26,1.35,-4);
+        const fit=Math.max(1,.9/aspect);
+        desiredCamera.set(26+7.1*fit,5.9*fit,-4+9.1*fit);
+        desiredTarget.set(26,1.45,-4);
       }else if(v==='memories'){
         desiredCamera.set(narrow?-8:-11,narrow?10:8,narrow?5:-2);desiredTarget.set(-22,1.55,-16);
       }else if(v==='terrace'){
         desiredCamera.set(narrow?-6:-9,narrow?12:9,narrow?38:33);desiredTarget.set(-21,1.3,18);
+      }else if(latest.current.campus?.startsWith('porsche-')){
+        const fit=Math.max(1,.95/aspect);
+        desiredCamera.set(25*fit,20*fit,31*fit);
+        desiredTarget.set(-1,4,-3);
+        controls.minDistance=10;
       }else{
         desiredCamera.set(narrow?27:21,narrow?23:16,narrow?34:25);desiredTarget.set(0,1.1,0);controls.minDistance=14;
       }
@@ -352,7 +443,7 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
     const observer=new ResizeObserver(resize);observer.observe(container);resize();
     let pointerStart={x:0,y:0};const down=(event:PointerEvent)=>{pointerStart={x:event.clientX,y:event.clientY};transition=false;};
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
-    const up=(event:PointerEvent)=>{if(currentView!=='workshop'||Math.hypot(event.clientX-pointerStart.x,event.clientY-pointerStart.y)>6)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const roots=displayCar?[displayCar.group,...(engineRoot.visible?[engineRoot]:[])]:[car.group];const hits=raycaster.intersectObjects(roots,true);if(hits.length){let node:THREE.Object3D|null=hits[0].object;while(node&&!node.userData.part)node=node.parent;if(node?.userData.part)latest.current.onPartSelect?.(node.userData.part);}};
+    const up=(event:PointerEvent)=>{if(currentView!=='workshop'||Math.hypot(event.clientX-pointerStart.x,event.clientY-pointerStart.y)>6)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const roots=activeExhibit?[activeExhibit.group]:displayCar?[displayCar.group,...(engineRoot.visible?[engineRoot]:[])]:[car.group];const hits=raycaster.intersectObjects(roots,true);if(hits.length){let node:THREE.Object3D|null=hits[0].object;while(node&&!node.userData.part)node=node.parent;if(node?.userData.part)latest.current.onPartSelect?.(node.userData.part);}};
     renderer.domElement.addEventListener('pointerdown',down);renderer.domElement.addEventListener('pointerup',up);
     let stopped=false,frame=0,lastTime=0,hasDrawnFrame=false;
     const render=(time:number)=>{
@@ -368,22 +459,101 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
         if(currentView==='entry'&&!entranceStarted){entranceStarted=true;setView('entry');if(matchMedia('(prefers-reduced-motion: reduce)').matches){camera.position.copy(desiredCamera);controls.target.copy(desiredTarget);gateOpen=1;worldDetails.setGateOpen(1);transition=false;}}
       }
       if(transition){camera.position.lerp(desiredCamera,1-Math.exp(-delta*3.2));controls.target.lerp(desiredTarget,1-Math.exp(-delta*3.2));if(camera.position.distanceTo(desiredCamera)<.025)transition=false;}
+      worldDetails.setCampus(latest.current.campus);
+      architecture.visible = !latest.current.campus?.startsWith('porsche-');
+      carport.visible = architecture.visible;
+      const studio = currentView === 'workshop';
+      const selectedModel = studio ? latest.current.workshopModelId : undefined;
+      if (selectedModel !== activeModelId) {
+        if (activeExhibit) activeExhibit.group.visible = false;
+        activeModelId = selectedModel;
+        activeExhibit = selectedModel ? workshopExhibits.get(selectedModel) : undefined;
+        const create = workshopModels.find(model => model.id === selectedModel)?.create;
+        if (selectedModel && create && !activeExhibit) {
+          latest.current.onExhibitStatus?.('loading');
+          let pending = pendingExhibits.get(selectedModel);
+          if (!pending) {
+            pending = Promise.resolve().then(create);
+            pendingExhibits.set(selectedModel, pending);
+          }
+          pending.then(exhibit => {
+            if (stopped) return;
+            pendingExhibits.delete(selectedModel);
+            if (!workshopExhibits.has(selectedModel)) {
+              workshopExhibits.set(selectedModel, exhibit);
+              exhibit.group.visible = false;
+              vehicleStage.add(exhibit.group);
+            }
+            if (activeModelId !== selectedModel) return;
+            activeExhibit = exhibit;
+            exhibit.group.visible = true;
+            actualExplode = latest.current.explode;
+            latest.current.onExhibitStatus?.('ready');
+          }).catch(error => {
+            pendingExhibits.delete(selectedModel);
+            if (stopped || activeModelId !== selectedModel) return;
+            console.warn('Workshop model unavailable', error);
+            latest.current.onExhibitStatus?.('error');
+          });
+        } else {
+          if (activeExhibit) activeExhibit.group.visible = true;
+          latest.current.onExhibitStatus?.('ready');
+        }
+        actualExplode = latest.current.explode;
+      }
+      if (activeExhibit) {
+        activeExhibit.group.position.copy(car.group.position);
+        activeExhibit.group.rotation.copy(car.group.rotation);
+        activeExhibit.assemble?.(desiredExplode);
+      }
+      const focus = activeExhibit?.focus?.(desiredExplode);
+      if (focus && focus.target !== cameraFocus) {
+        cameraFocus = focus.target;
+        controls.minDistance = 1.15;
+        desiredTarget.copy(focus.target).applyEuler(car.group.rotation).add(car.group.position);
+        const fit = Math.max(1, .95 / camera.aspect);
+        desiredCamera.copy(desiredTarget).addScaledVector(focus.cameraOffset, fit);
+        transition = true;
+      } else if (!focus && cameraFocus) {
+        cameraFocus = null;
+        setView(currentView);
+      }
+      const useMainCar = !workshopModels.some(model => model.id === selectedModel && model.create);
+      car.group.visible = useMainCar && !displayCar;
+      if (displayCar) displayCar.group.visible = useMainCar;
       actualExplode=THREE.MathUtils.lerp(actualExplode,desiredExplode,1-Math.exp(-delta*7));
-      car.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));
-      displayCar?.parts.forEach(p=>p.group.position.copy(p.origin).addScaledVector(p.offset,actualExplode));engineRoot.visible=!!displayCar&&currentView==='workshop'&&actualExplode>.08;
+      const partProgress=(part:DisplayCar['parts'][number])=>{
+        const name=part.group.userData.part;
+        if (useMainCar && studio) {
+          const start = name === 'powertrain' || name === 'chassis' ? 0 : name === 'wheels' ? .3 : name === 'body' ? .6 : .85;
+          const end = name === 'powertrain' || name === 'chassis' ? .3 : name === 'wheels' ? .6 : name === 'body' ? .86 : 1;
+          return 1 - THREE.MathUtils.smoothstep(actualExplode, start, end);
+        }
+        if (!studio) return 0;
+        const start=part.group.userData.phase ?? (name==='body'?0:name==='glass'?.13:name==='wheels'?.24:name==='powertrain'?.37:.25);
+        return THREE.MathUtils.smoothstep(actualExplode,start,Math.min(1,start+.45));
+      };
+      for(const part of activeExhibit?.parts ?? [...car.parts,...mechanics.parts,...(displayCar?.parts??[])]){
+        part.group.position.copy(part.origin).addScaledVector(part.offset,partProgress(part));
+      }
+      engineRoot.visible=useMainCar&&!!displayCar&&studio&&actualExplode<.86;
       for (const { part, line, anchor } of guides) {
-        line.visible = currentView === 'workshop' && actualExplode > .09;
+        const progress=partProgress(part);
+        line.visible = studio && progress > .025 && part.offset.lengthSq() > .1;
         if (!line.visible) continue;
         const shift = part.offset;
         const position = line.geometry.getAttribute('position');
-        position.setXYZ(1, anchor.x + shift.x * actualExplode, anchor.y + shift.y * actualExplode, anchor.z + shift.z * actualExplode);
+        position.setXYZ(1, anchor.x + shift.x * progress, anchor.y + shift.y * progress, anchor.z + shift.z * progress);
         position.needsUpdate = true;
         const distance = line.geometry.getAttribute('lineDistance');
-        distance.setX(1, shift.length() * actualExplode);
+        distance.setX(1, shift.length() * progress);
         distance.needsUpdate = true;
       }
-      scene.background instanceof THREE.Color&&scene.background.lerp(fogTarget,.025);if(scene.fog instanceof THREE.Fog)scene.fog.color.copy(scene.background as THREE.Color);
-      sunlight.color.lerp(sunTarget,.025);sunlight.intensity=THREE.MathUtils.lerp(sunlight.intensity,sunIntensity,.025);ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,ambientTarget,.025);renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,exposureTarget,.025);
+      scene.background instanceof THREE.Color&&scene.background.lerp(fogTarget,.08);if(scene.fog instanceof THREE.Fog)scene.fog.color.copy(scene.background as THREE.Color);
+      sunlight.color.lerp(studio?studioColor:sunTarget,.025);sunlight.intensity=THREE.MathUtils.lerp(sunlight.intensity,studio?3:sunIntensity,.025);ambient.intensity=THREE.MathUtils.lerp(ambient.intensity,studio?1.7:ambientTarget,.025);renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,studio?1.12:exposureTarget,.025);
+      rain.visible=!studio&&latest.current.config.weather==='rain';
+      stars.visible=!studio&&latest.current.config.time==='night'&&!rain.visible;
+      scene.environmentIntensity=studio?.9:latest.current.config.time==='night'?.2:latest.current.config.time==='day'?.5:.42;
       if(rain.visible){const points=rainGeometry.attributes.position.array as Float32Array;for(let i=0;i<rainCount;i++){points[i*6+1]-=delta*9;points[i*6+4]-=delta*9;if(points[i*6+1]<0){points[i*6+1]+=17;points[i*6+4]+=17;}}rainGeometry.attributes.position.needsUpdate=true;}
       controls.update();renderer.render(scene,camera);
       hasDrawnFrame=true;
@@ -409,7 +579,10 @@ export default function GardenScene({config,view,explode,pet='none',active=true,
   useEffect(()=>{runtime.current?.setConfig(config);},[config]);
   useEffect(()=>{runtime.current?.setView(view);},[view]);
   useEffect(()=>{runtime.current?.setExplode(explode);},[explode]);
-  return <div ref={host} className="garden-canvas" style={{width:'100%',height:'100%',position:'relative'}} aria-label="可拖动、缩放和平移探索的保时捷之家地图，包含庭院、独立工坊、记忆展亭与来客露台；车型为 Porsche 911 Carrera 4S，动力总成为示意">
+  const exhibitName = view === 'workshop'
+    ? workshopModels.find(model => model.id === workshopModelId)?.name
+    : undefined;
+  return <div ref={host} className="garden-canvas" style={{width:'100%',height:'100%',position:'relative'}} aria-label={exhibitName ? `工坊展车 ${exhibitName}，可拖动旋转与缩放` : "可拖动、缩放和平移探索的保时捷之家地图"}>
     {DESTINATIONS.map(place=><button key={place.id} ref={node=>{hotspots.current[place.id]=node;}} type="button" className="world-hotspot" aria-label={`进入${place.name}`} onClick={()=>latest.current.onPlaceSelect?.(place.id)} style={{position:'absolute',zIndex:5,top:0,left:0,visibility:'hidden',pointerEvents:'auto',cursor:'pointer',border:'1px solid rgba(255,255,255,.7)',background:'rgba(248,246,236,.94)',color:'#354b38',borderRadius:14,padding:'11px 15px',boxShadow:'0 7px 25px rgba(37,50,31,.15)',fontFamily:'inherit',backdropFilter:'blur(10px)',whiteSpace:'nowrap',textAlign:'left'}}>
       <span style={{display:'block',fontSize:13,fontWeight:600,letterSpacing:'.035em'}}><span style={{display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#7e9567',marginRight:7,verticalAlign:'middle'}}/>{place.name}<span aria-hidden="true" style={{marginLeft:8,fontSize:12,opacity:.5}}>↗</span></span>
       <span style={{display:'block',marginTop:4,fontSize:8,letterSpacing:'.13em',opacity:.58}}>{place.subtitle}</span>

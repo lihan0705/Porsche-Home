@@ -249,3 +249,39 @@
   .mission-lamp, .mission-running-lights { animation: none; opacity: 0; }
   .mission-gauge-needle { transition: none; }
 }
+
+/* Keep the engineering display clear of the surrounding garden interface. */
+.is-workshop .scene-vignette { display: none; }
+.is-workshop .scene-intro { top: 82px; left: clamp(18px, 4vw, 46px); }
+.is-workshop .scene-intro h1 { font-size: clamp(18px, 2.5vw, 28px); margin: 8px 0; }
+.is-workshop .scene-intro h1 span { display: inline; }
+.is-workshop .scene-intro .story-link { margin-top: 8px; }
+.is-workshop .workshop-controls {
+  bottom: 82px;
+  padding: 11px 16px 8px;
+  background: rgba(252, 252, 252, .94);
+  border-color: rgba(255, 255, 255, .95);
+}
+.is-workshop .workshop-control-heading h2 { margin-top: 2px; }
+.is-workshop .explode-slider-row { margin-top: 3px; }
+.is-workshop .part-buttons { margin-top: 5px; }
+.is-workshop .part-description,
+.is-workshop .workshop-disclosure { margin-top: 4px; }
+@media (max-height: 620px) {
+  .is-workshop .scene-intro .story-link { display: none; }
+  .is-workshop .workshop-controls { bottom: 73px; }
+}
+
+.workshop-model-select {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #b9c4aa;
+  border-radius: 4px;
+  background: #f7f8ef;
+  color: #354b38;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}

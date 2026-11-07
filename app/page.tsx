@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties, type MouseEvent } from "react";
 import { ArrowRight, ArrowUpRight, BookOpen, Check, ChevronDown, Copy, Home, Leaf, LoaderCircle, Mail, Map as MapIcon, Moon, PawPrint, Pause, QrCode, PenLine, Play, RotateCcw, Save, Settings2, Sparkles, Sun, Sunset, Users, Wrench, X } from "lucide-react";
 import GardenScene from "@/components/GardenScene";
+import { workshopModels } from "@/lib/workshop-catalog";
 import GarageLoading from "@/components/GarageLoading";
 import MissionShowcase from "@/components/MissionShowcase";
 import { FriendsPanel, GalleryPanel, PetPanel, PhoneEntry, VehiclePanel } from "@/components/DemoPanels";
@@ -31,13 +32,6 @@ const colors = [
   { label: "胭脂红", value: "#9d2927" }, { label: "暖砂白", value: "#e9e7dc" },
   { label: "曜石黑", value: "#252a29" }, { label: "海湾蓝", value: "#466b82" },
 ];
-const partInfo: Record<string, { name: string; copy: string }> = {
-  body: { name: "车身外壳", copy: "沿着流畅的车顶弧线，观察车身与座舱的组合。拖动滑杆，展开这一条熟悉的轮廓。" },
-  glass: { name: "玻璃与座舱", copy: "挡风玻璃、侧窗与座舱共同勾勒驾驶者的视野。看看它们如何与车身组合。" },
-  wheels: { name: "车轮组件", copy: "车轮从车身两侧展开，呈现轮圈、轮胎与底盘的位置关系。可在布置面板中切换轮圈颜色。" },
-  chassis: { name: "底盘平台", copy: "底盘连接并承托各个主要组件。这里以简化分组展示整体结构，便于观察装配关系。" },
-  powertrain: { name: "动力组件", copy: "后部动力组件以示意几何呈现，用于探索分组关系，不提供车型工程数据。" },
-};
 const partAliases: Record<string, string> = { "车身": "body", "车身外壳": "body", "玻璃": "glass", "座舱": "glass", "轮胎": "wheels", "车轮": "wheels", "底盘": "chassis", "发动机": "powertrain", "动力": "powertrain" };
 const signature = (h: HomeData) => JSON.stringify([h.title, h.ownerName, h.story, h.config]);
 const SIGNIN_DRAFT_KEY = "porsche-home:signin-draft:v1";
@@ -94,6 +88,7 @@ export default function PorscheHome() {
   const [loadError, setLoadError] = useState("");
   const [sceneReady, setSceneReady] = useState(false);
   const [entered,setEntered]=useState(false);
+  const [workshopLink,setWorkshopLink]=useState(false);
   const [loadingProgress,setLoadingProgress]=useState(0);
   const [loadingStage,setLoadingStage]=useState('正在打开你的私人世界');
   const [isVisit, setIsVisit] = useState(false);
@@ -114,7 +109,9 @@ export default function PorscheHome() {
   const [notice, setNotice] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
   const [copied, setCopied] = useState(false);
-  const [explode, setExplode] = useState(0);
+  const [workshopModel, setWorkshopModel] = useState(workshopModels[0]);
+  const [exhibitStatus, setExhibitStatus] = useState<'loading'|'ready'|'error'>('ready');
+  const [explode, setExplode] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [part, setPart] = useState("body");
   const [edit, setEdit] = useState({ title: "", ownerName: "", story: "" });
@@ -134,11 +131,22 @@ export default function PorscheHome() {
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
     const id = params.get("visit") || params.get("home");
+    if (params.get("view") === "workshop") {
+      setWorkshopLink(true);
+      setView("workshop");
+      const model = workshopModels.find(({ id }) => id === params.get("model"));
+      if (model) {
+        setWorkshopModel(model);
+        setExplode(model.chapters ? 1 : 0);
+      }
+    }
     setPhoneUrl(window.location.href);
     setFriends(readLocal("friends", []));
     const demo = !id ? getSampleHome(params.get("demo")) : null;
     if (demo) {
       setSample(demo.friend);
+      setView("home");
+      setWorkshopLink(true);
       setIsVisit(true);
       setPet(demo.pet);
       setHome({ ...demo.home, postcards: readLocal(`demo-postcards:${demo.friend.key}`, []) });
@@ -162,6 +170,7 @@ export default function PorscheHome() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+  useEffect(() => { if (workshopLink && sceneReady && !loading) setEntered(true); }, [workshopLink, sceneReady, loading]);
   useEffect(() => { if (!notice) return; const id = window.setTimeout(() => setNotice(""), 4500); return () => window.clearTimeout(id); }, [notice]);
   const closeModal = useCallback(() => { setModal(null); setPostError(""); }, []);
   const selectPlace = useCallback((place: ScenePlace) => {
@@ -212,12 +221,12 @@ export default function PorscheHome() {
     if (!playing) return;
     let frame = 0; let previous = 0; let value = explode;
     const tick = (now: number) => {
-      if (previous) { value = Math.min(1, value + (now - previous) / 4500); setExplode(value); if (value === 1) { setPlaying(false); return; } }
+      if (previous) { value = Math.min(1, value + (now - previous) / workshopModel.duration); setExplode(value); if (value === 1) { setPlaying(false); return; } }
       previous = now; frame = window.requestAnimationFrame(tick);
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [playing]);
+  }, [playing, workshopModel]);
   const changeConfig = <K extends keyof HomeConfig>(key: K, value: HomeConfig[K]) => {
     if (readOnly) return;
     setHome((current) => ({ ...current, config: { ...current.config, [key]: value } }));
@@ -274,7 +283,11 @@ export default function PorscheHome() {
     } catch (error) { setPostError(error instanceof Error ? error.message : "明信片暂时未送达，请稍后重试。"); }
     finally { setPosting(false); }
   };
-  const selectedPart = partInfo[part] || partInfo.body;
+  const partInfo = workshopModel.parts;
+  const chapters = workshopModel.chapters;
+  const activeChapter = chapters?.filter(chapter => explode >= chapter.progress).at(-1);
+  const selectedPart = partInfo[activeChapter?.key ?? part] || partInfo.body;
+  const animationName = chapters ? "拼装" : "拆解";
   const currentFriend = sample ?? (readOnly && home.id
     ? { key: home.id, name: home.ownerName, title: home.title, region: "车友庭院", href: `/?visit=${encodeURIComponent(home.id)}` }
     : null);
@@ -284,7 +297,7 @@ export default function PorscheHome() {
   if (loadError) return <main className="error-page"><div className="brand-wordmark">PORSCHE HOME</div><p className="eyebrow">A PLACE TO RETURN TO</p><h1>暂时没能走进这座家。</h1><p>{loadError}</p><a className="primary-button" href="/">返回我的庭院 <ArrowRight size={16} /></a></main>;
   return <main className={`home-app time-${home.config.time} is-${view}`}>
     <div className="world-interface" inert={!entered}>
-    <div className="scene-stage" aria-label="可旋转和缩放的三维地图，包含庭院之家、工程工坊、记忆展亭和来客露台"><GardenScene config={home.config} view={view} explode={explode} pet={pet.kind} active={entered&&!modal} onReady={() => setSceneReady(true)} onPartSelect={(value) => setPart(partAliases[value] || value)} onPlaceSelect={selectPlace} onLoadingProgress={(value,stage)=>{setLoadingProgress(value);setLoadingStage(stage);}} /></div>
+    <div className="scene-stage" aria-label="可旋转和缩放的三维地图，包含庭院之家、工程工坊、记忆展亭和来客露台"><GardenScene config={home.config} view={view} campus={sample?.key} workshopModelId={workshopModel.id} explode={explode} onExhibitStatus={setExhibitStatus} pet={pet.kind} active={entered&&!modal} onReady={() => setSceneReady(true)} onPartSelect={(value) => setPart(partAliases[value] || value)} onPlaceSelect={selectPlace} onLoadingProgress={(value,stage)=>{setLoadingProgress(value);setLoadingStage(stage);}} /></div>
     <div className="scene-vignette" aria-hidden="true" />
     <header className="site-header">
       <a className="brand" href="/" aria-label="保时捷之家首页"><span className="brand-wordmark">PORSCHE HOME<span className="brand-dot">.</span></span><span className="brand-caption">保时捷之家 <i /> 车主会客厅 · 概念体验</span></a>
@@ -298,7 +311,7 @@ export default function PorscheHome() {
       <div className="place-note"><span className="status-dot" /> {timeLabel} · {home.config.weather === "rain" ? "细雨正好" : "天气正好"}<span className="note-divider">/</span><span>{readOnly ? "欢迎来做客" : "此刻，属于你"}</span></div>
     </section>
     {view === "home" && !panelOpen && !readOnly && <div className="design-invitation"><span className="small-orbit"><Sparkles size={18} strokeWidth={1.5} /></span><div><p>理想的家，从一句话开始。</p><span>{aiReady ? "让 AI 为你的热爱布置一个空间" : "选择风格，或用简单指令布置"}</span></div><button className="round-button" aria-label="打开空间布置面板" onClick={() => setPanelOpen(true)}><ArrowUpRight size={19} /></button></div>}
-    {sample && <div className="prototype-visitor-badge">{sample.region} · 示范庭院</div>}
+    {sample && <div className="prototype-visitor-badge">{sample.region} · {sample.key.startsWith("porsche-") ? "建筑场景" : "示范庭院"}</div>}
     {(view === "entry" || view === "home") && (!readOnly || pet.kind !== "none") && <div className="prototype-pet-chip"><PawPrint size={16} /><span>{pet.kind === "none" ? "庭院宠物" : pet.name}</span>{!readOnly && <button className="text-button" onClick={() => setModal("pet")}>{pet.kind === "none" ? "添加宠物" : "编辑宠物"}</button>}</div>}
     {view === "memories" && <aside className="station-card memory-station-card" aria-label="记忆展亭里的故事"><p className="eyebrow"><BookOpen size={13} /> A STORY KEPT CLOSE</p><h2>{home.ownerName}与爱车的故事</h2><p className="station-story">{home.story.length > 145 ? `${home.story.slice(0, 145)}…` : home.story || "给这一段热爱，写一个属于自己的开头。"}</p><div className="station-card-actions"><button className="text-button" onClick={() => setModal("gallery")}>参观展廊 <ArrowUpRight size={14} /></button></div><div className="station-card-actions"><button className="text-button" onClick={() => setModal("story")}>读完整的故事 <ArrowRight size={14} /></button>{!readOnly && <button className="icon-button" aria-label="编辑展亭中的故事" onClick={openEdit}><PenLine size={15} /></button>}</div></aside>}
     {view === "terrace" && <aside className="station-card terrace-station-card" aria-label="来客露台与明信片"><p className="eyebrow"><Mail size={13} /> ALWAYS ROOM FOR A FRIEND</p><h2>留一句话，留一段回忆。</h2><p className="station-story">{home.postcards.length ? `这里已收到 ${home.postcards.length} 张明信片。每一次来访，都让这座家多一点温度。` : "第一张明信片，还在路上。选一张喜欢的信纸，把这一刻留给朋友。"}</p><button className="primary-button" onClick={() => setModal("postcards")}><Mail size={14} /> 写张明信片 <ArrowUpRight size={14} /></button><button className="text-button terrace-invite" onClick={share}>{readOnly ? "分享这处风景" : "邀请朋友来坐坐"}<ArrowUpRight size={13} /></button></aside>}
@@ -320,18 +333,25 @@ export default function PorscheHome() {
         {designResult && <div className="design-result" role="status"><p>{designResult}</p>{undoConfig.current && <button onClick={() => { const config = undoConfig.current; if (config) setHome((current) => ({ ...current, config })); undoConfig.current = null; setDesignResult("已恢复上一次布置。"); }}><RotateCcw size={12} /> 撤销这次布置</button>}</div>}
       </div><button className="panel-story-button" onClick={openEdit}><PenLine size={13} /> 编辑家的名字与故事 <ArrowUpRight size={14} /></button>
     </aside>}
-    {view === "workshop" && <section className="workshop-controls" aria-label="车辆拆解控制">
-      <div className="workshop-control-heading"><div><p className="eyebrow">EXPLORE THE DETAILS</p><h2>从整体，到每一个细节。</h2></div><span className="explode-value">{Math.round(explode * 100)}<small>%</small></span></div>
-      <div className="explode-slider-row"><button className="icon-button" aria-label={playing ? "暂停拆解动画" : "播放拆解动画"} onClick={() => { if (explode === 1) setExplode(0); setPlaying(!playing); }}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><input aria-label="车辆拆解进度" type="range" min="0" max="100" value={explode * 100} style={{ "--range-progress": `${explode * 100}%` } as CSSProperties} onChange={(event) => { setPlaying(false); setExplode(Number(event.target.value) / 100); }} /><button className="icon-button" aria-label="复原车辆" onClick={() => { setPlaying(false); setExplode(0); }}><RotateCcw size={17} /></button></div>
-      <div className="slider-captions"><span>完整轮廓</span><span>分组展开</span></div>
-      <div className="part-buttons" aria-label="组件介绍">{Object.entries(partInfo).map(([key, info]) => <button key={key} className={part === key ? "selected" : ""} onClick={() => setPart(key)}>{info.name}</button>)}</div><p className="part-description"><strong>{selectedPart.name}</strong>{selectedPart.copy}</p><div className="prototype-workshop-footer"><p className="workshop-disclosure">911 Carrera 4S · 外观分组拆解</p><button className="text-button" onClick={() => setModal("vehicle")}>车况档案 <ArrowUpRight size={13} /></button></div>
+    {view === "workshop" && <section className="workshop-controls" aria-label={`车辆${animationName}控制`}>
+      <div className="workshop-control-heading"><div><p className="eyebrow">EXPLORE THE DETAILS</p><select className="workshop-model-select" aria-label="工坊车型" value={workshopModel.id} onChange={(event) => {
+        const model = workshopModels.find(({ id }) => id === event.target.value);
+        if (!model) return;
+        setPlaying(false);
+        setExplode(model.chapters ? 1 : 0);
+        setPart("body");
+        setWorkshopModel(model);
+      }}>{workshopModels.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select></div><span className="explode-value">{Math.round(explode * 100)}<small>%</small></span></div>
+      <div className="explode-slider-row"><button className="icon-button" disabled={exhibitStatus !== "ready"} aria-label={`${playing ? "暂停" : "播放"}${animationName}动画`} onClick={() => { if (explode === 1) setExplode(0); setPlaying(!playing); }}>{playing ? <Pause size={17} /> : <Play size={17} />}</button><input disabled={exhibitStatus !== "ready"} aria-label={`车辆${animationName}进度`} type="range" min="0" max="100" value={explode * 100} style={{ "--range-progress": `${explode * 100}%` } as CSSProperties} onChange={(event) => { setPlaying(false); setExplode(Number(event.target.value) / 100); }} /><button className="icon-button" aria-label={chapters ? "查看拼装成品" : "复原车辆"} onClick={() => { setPlaying(false); setExplode(chapters ? 1 : 0); }}><RotateCcw size={17} /></button></div>
+      <div className="slider-captions"><span>{chapters ? "开始拼装" : "完整轮廓"}</span><span>{chapters ? "拼装完成" : "分组展开"}</span></div>
+      <div className="part-buttons" aria-label="组件介绍">{chapters ? chapters.map(chapter => <button key={chapter.key} disabled={exhibitStatus !== "ready"} className={activeChapter?.key === chapter.key ? "selected" : ""} onClick={() => { setPlaying(false); setExplode(chapter.jump); }}>{chapter.label}</button>) : Object.entries(partInfo).map(([key, info]) => <button key={key} className={part === key ? "selected" : ""} onClick={() => setPart(key)}>{info.name}</button>)}</div><p className="part-description"><strong>{selectedPart.name}</strong>{exhibitStatus === "loading" ? "正在载入 42096 零件…" : exhibitStatus === "error" ? "模型载入失败，请切换车型后重试。" : selectedPart.copy}</p><div className="prototype-workshop-footer"><p className="workshop-disclosure">{workshopModel.disclosure}</p>{workshopModel.instructions && <a className="text-button" href={workshopModel.instructions} target="_blank" rel="noreferrer">官方说明书 <ArrowUpRight size={13} /></a>}{!workshopModel.create && <button className="text-button" onClick={() => setModal("vehicle")}>车况档案 <ArrowUpRight size={13} /></button>}</div>
     </section>}
     <footer className="scene-footer"><span className="scene-number">{currentPlace.footer}</span><span className="scene-help">拖动旋转 <i /> 滚动缩放</span></footer>
     <nav className="bottom-nav valley-nav" aria-label="空间导航">{navigationPlaces.map(({ id, label, Icon }) => <button key={id} className={view === id||(view==='entry'&&id==='map') ? "active" : ""} aria-current={view === id||(view==='entry'&&id==='map') ? "location" : undefined} onClick={() => selectPlace(id)}><Icon size={17} strokeWidth={1.6} /><span>{label}</span>{id === "terrace" && home.postcards.length > 0 && <span className="postcard-count">{home.postcards.length}</span>}</button>)}</nav>
     {!readOnly && <button className={`customize-button ${panelOpen ? "is-open" : ""}`} onClick={() => { if (!panelOpen) selectPlace("home"); setPanelOpen(!panelOpen); }} aria-expanded={panelOpen} aria-label="布置空间"><Settings2 size={16} /><span>{panelOpen ? "收起布置" : "布置空间"}</span><ChevronDown size={13} /></button>}
     {readOnly && <a className="customize-button" href="/"><Home size={15} /><span>回到我的家</span><ArrowUpRight size={14} /></a>}
     </div>
-    <GarageLoading visible={loading || !sceneReady} progress={loadingProgress} stage={loadingStage} onEnter={()=>setEntered(true)}/>
+    {(!workshopLink || !entered) && <GarageLoading visible={loading || !sceneReady} progress={loadingProgress} stage={loadingStage} onEnter={()=>setEntered(true)}/>}
     {notice && <div className="toast" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice("")}><X size={14} /></button></div>}
     {modal === "phone" && <Dialog title="手机扫码体验" eyebrow="TAKE THE TOUR WITH YOU" onClose={closeModal}><PhoneEntry initialUrl={phoneUrl} /></Dialog>}
     {modal === "friends" && <Dialog title="好友车库" eyebrow="GARAGES AROUND THE WORLD" onClose={closeModal}><FriendsPanel friends={friends} current={currentFriend} onToggle={toggleFriend} /></Dialog>}
@@ -347,7 +367,7 @@ export default function PorscheHome() {
       setModal(null);
       selectPlace("home");
     }} /></Dialog>}
-    {modal === "story" && <Dialog title={view !== "workshop" ? home.title : "走近热爱的每一个细节"} eyebrow={view !== "workshop" ? "A STORY WORTH SHARING" : "INSIDE THE WORKSHOP"} onClose={closeModal} className="story-modal"><div className="story-rule" /><p className="story-owner">{view !== "workshop" ? `${home.ownerName} · 关于这座家` : "概念工坊 · 车辆结构探索"}</p><p className="story-body">{view !== "workshop" ? home.story : "在工坊里，你可以展开、旋转并复原车辆的主要组件，探索外壳、座舱、车轮、底盘与动力组件之间的位置关系。当前拆解为可视化分组演示，内部组件经过简化，不作为维修或工程资料。"}</p>{!readOnly && view !== "workshop" && <button className="text-button" onClick={openEdit}><PenLine size={14} /> 写下我的故事</button>}<p className="story-signoff">A home for your passion.</p></Dialog>}
+    {modal === "story" && <Dialog title={view !== "workshop" ? home.title : "走近热爱的每一个细节"} eyebrow={view !== "workshop" ? "A STORY WORTH SHARING" : "INSIDE THE WORKSHOP"} onClose={closeModal} className="story-modal"><div className="story-rule" /><p className="story-owner">{view !== "workshop" ? `${home.ownerName} · 关于这座家` : "概念工坊 · 车辆结构探索"}</p><p className="story-body">{view !== "workshop" ? home.story : "在工坊里，你可以播放或拖动拼装进度，旋转查看车身、轮组、底盘与动力组件如何归位。Carrera 4S 的内部机械为结构示意，Technic 42096 则按模型装配分步演示。"}</p>{!readOnly && view !== "workshop" && <button className="text-button" onClick={openEdit}><PenLine size={14} /> 写下我的故事</button>}<p className="story-signoff">A home for your passion.</p></Dialog>}
     {modal === "edit" && <Dialog title="让这座家，更像你。" eyebrow="YOUR HOME, YOUR STORY" onClose={closeModal}><form className="edit-form" onSubmit={(event) => { event.preventDefault(); setHome((current) => ({ ...current, title: edit.title.trim(), ownerName: edit.ownerName.trim(), story: edit.story.trim() })); setModal(null); showNotice("故事已更新，记得保存你的家。"); }}><label>家的名字<input value={edit.title} maxLength={50} required onChange={(event) => setEdit({ ...edit, title: event.target.value })} /></label><label>怎么称呼你<input value={edit.ownerName} maxLength={30} required onChange={(event) => setEdit({ ...edit, ownerName: event.target.value })} /></label><label>我与爱车的故事<textarea value={edit.story} maxLength={800} required rows={5} onChange={(event) => setEdit({ ...edit, story: event.target.value })} /><span className="field-count">{edit.story.length}/800</span></label><button className="primary-button" type="submit">把故事放进家里 <ArrowRight size={15} /></button></form></Dialog>}
     {modal === "signin" && <Dialog title="欢迎回来" eyebrow="PORSCHE / VISION MODEL" onClose={closeModal} className="signin-modal mission-signin"><MissionShowcase compact/><div className="signin-modal-copy"><p className="modal-copy">登录，收藏你的 911 与专属空间。<br/>让每一次归来，都有自己的故事。</p><a className="primary-button signin-continue" href="/signin-with-chatgpt?return_to=%2F" target="_top" onClick={handoffSignin}>使用 ChatGPT 登录 <ArrowUpRight size={17} /></a><p className="signin-benefits">保存专属布置 <span/> 邀请朋友来访 <span/> 收藏旅途来信</p></div></Dialog>}
     {modal === "invite" && <Dialog title="好风景，想与你分享。" eyebrow="YOU ARE ALWAYS WELCOME" onClose={closeModal}><div className="invitation-illustration" aria-hidden="true"><Home size={34} strokeWidth={1} /><span>COME ON OVER</span><div className="invitation-stamp">HOME<br />911</div></div><p className="modal-copy">邀请朋友走进「{home.title}」，看看你的车，读一段故事，留下一张明信片。</p><label className="invite-link-label">专属拜访链接<div className="invite-link-row"><input aria-label="专属拜访链接" readOnly value={inviteUrl} onFocus={(event) => event.target.select()} /><button aria-label="复制拜访链接" onClick={copyInvite}>{copied ? <Check size={17} /> : <Copy size={17} />}</button></div></label><div className="invite-dialog-actions"><button className="primary-button" onClick={copyInvite}>{copied ? "链接已复制" : "复制邀请链接"}{copied ? <Check size={15} /> : <ArrowRight size={15} />}</button><a className="text-button" href={inviteUrl} target="_blank" rel="noreferrer">以访客身份打开 <ArrowUpRight size={14} /></a></div><p className="fine-print">拜访链接受站点访问权限限制，仅已获权限的朋友可打开。</p></Dialog>}
