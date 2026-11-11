@@ -25,37 +25,37 @@ export const PARTS: Part[] = [
   {
     id: 'engine', category: 'ENGINE', name: '4.0L FLAT-SIX', subtitle: 'GT3 4.0 Boxer',
     cn: '自然吸气水平对置六缸', code: 'NO. 040-6', rarity: 'Legendary', fit: '动力总成',
-    image: '/parts/engine.webp',
+    image: './parts/engine.webp',
     blurb: '510 PS / 9,000 rpm 红线，3,996 cc 自然吸气水平对置六缸。整个零件包里最难得的一张。',
   },
   {
     id: 'transmission', category: 'TRANSMISSION', name: 'PDK', subtitle: '7-Speed Dual Clutch',
     cn: '7 速双离合变速箱', code: 'NO. 740-7D', rarity: 'Epic', fit: '传动',
-    image: '/parts/transmission.webp',
+    image: './parts/transmission.webp',
     blurb: '7 速湿式双离合，耐受 760 N·m，约 100 ms 完成换挡，动力几乎不中断。',
   },
   {
     id: 'wheels', category: 'WHEELS & TYRES', name: 'Center Lock', subtitle: 'Magnesium Wheel',
     cn: '锻造镁合金中央锁止轮组', code: 'NO. 040-7', rarity: 'Rare', fit: '行走机构',
-    image: '/parts/wheels.webp',
+    image: './parts/wheels.webp',
     blurb: '20 / 21 英寸锻造镁合金轮圈，中央锁止单螺母，簧下质量轻 25%。',
   },
   {
     id: 'brakes', category: 'BRAKES', name: 'PCCB', subtitle: 'Porsche Ceramic Composite Brake',
     cn: '陶瓷复合制动系统', code: 'NO. 020-6', rarity: 'Epic', fit: '制动',
-    image: '/parts/brakes.webp',
+    image: './parts/brakes.webp',
     blurb: '碳陶瓷制动盘，前 410 mm / 后 390 mm，六活塞卡钳，制动距离更短且几乎无热衰减。',
   },
   {
     id: 'suspension', category: 'SUSPENSION', name: 'PASM', subtitle: 'Porsche Active Suspension Management',
     cn: '主动悬挂管理系统', code: 'NO. 030-6', rarity: 'Rare', fit: '底盘',
-    image: '/parts/suspension.webp',
+    image: './parts/suspension.webp',
     blurb: '连续阻尼控制，Normal / Sport / Track 三种设定，车身再降 30 mm，响应 < 10 ms。',
   },
 ];
 
 /** The single card back shipped with the pack. */
-export const CARD_BACK = '/parts/back.webp';
+export const CARD_BACK = './parts/back.webp';
 
 /**
  * 彩蛋：抽到 engine 卡片后，结果区会多一个「发动机 3D 拆分」按钮。
@@ -63,7 +63,7 @@ export const CARD_BACK = '/parts/back.webp';
  * exploded-view-studio 同步而来；同源、同 5173 端口，不再需要单独的 :5199 静态服务）。
  * 相对路径，换域名 / 局域网访问都不用改。
  */
-export const ENGINE_EXPLODED_VIEW = '/engine-brokendown/';
+export const ENGINE_EXPLODED_VIEW = './engine-brokendown/';
 
 export const RARITY_META: Record<Rarity, { label: string; cn: string; order: number }> = {
   Rare: { label: 'RARE', cn: '稀有', order: 0 },

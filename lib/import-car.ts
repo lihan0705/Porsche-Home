@@ -25,10 +25,10 @@ function splitSide(source:THREE.BufferGeometry,side:number) {
 export async function loadDisplayCar(color:string,onProgress?:(fraction:number)=>void):Promise<DisplayCar> {
   // The decoder resolves browser asset URLs when its module is loaded.
   const { DRACOLoader } = await import('three/examples/jsm/loaders/DRACOLoader.js');
-  const draco=new DRACOLoader();draco.setDecoderPath('/models/draco/');
+  const draco=new DRACOLoader();draco.setDecoderPath('./models/draco/');
   const loader=new GLTFLoader();loader.setDRACOLoader(draco);
   let gltf;
-  try{gltf=await loader.loadAsync('/models/porsche-911-carrera-4s.glb',event=>{if(event.total>0)onProgress?.(event.loaded/event.total);});}finally{draco.dispose();}
+  try{gltf=await loader.loadAsync('./models/porsche-911-carrera-4s.glb',event=>{if(event.total>0)onProgress?.(event.loaded/event.total);});}finally{draco.dispose();}
   const source=gltf.scene;const plane=source.getObjectByName('Plane');plane?.removeFromParent();source.updateMatrixWorld(true);
   const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const normalization=new THREE.Matrix4().makeScale(4.75/size.z,4.75/size.z,4.75/size.z);

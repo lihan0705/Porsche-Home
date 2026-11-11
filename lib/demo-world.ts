@@ -15,7 +15,7 @@ const sampleHomes = [
 ] satisfies Array<Omit<Friend, 'href'> & { story: string; plants: HomeConfig['plants']; carColor: string; pet: Pet }>;
 
 export const sampleFriends: Friend[] = sampleHomes.map(({ key, name, title, region }) => ({
-  key, name, title, region, href: `/?demo=${key}`,
+  key, name, title, region, href: `./?demo=${key}`,
 }));
 
 export const sampleMemories: Memory[] = [

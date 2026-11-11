@@ -37,9 +37,9 @@ export default function FriendsMap() {
     <div className="friends-map-layout">
       <div className="illustrated-map">
         <div className="map-artwork">
-          <Image src="/images/porsche-world-landmarks.webp" alt="手绘世界好友地图：薄荷色海面、彩色微缩大陆、卡通地标与两辆 Porsche 跑车，各地分布着示例车友，慕尼黑穹顶之家可点击拜访。" width={1619} height={971} priority unoptimized sizes="(max-width: 760px) 100vw, 75vw"/>
+          <Image src="./images/porsche-world-landmarks.webp" alt="手绘世界好友地图：薄荷色海面、彩色微缩大陆、卡通地标与两辆 Porsche 跑车，各地分布着示例车友，慕尼黑穹顶之家可点击拜访。" width={1619} height={971} priority unoptimized sizes="(max-width: 760px) 100vw, 75vw"/>
           {sampleMapFriends.map(({ name, city, x, y, icon: Icon, color }) => <span key={name} className="map-sample-friend" style={{ left: `${x}%`, top: `${y}%`, color }} aria-label={`${city} · ${name}（示例车友）`}><Icon size={17} aria-hidden="true"/><span><strong>{name}</strong><small>{city}</small></span></span>)}
-          <a className="map-shanghai-pin map-munich-pin" href="/?demo=munich" aria-label="拜访慕尼黑穹顶之家"><span className="map-pin-icon"><Trees size={18} aria-hidden="true"/></span><span><strong>慕尼黑</strong><small>穹顶之家 · 去串门</small></span><ArrowUpRight size={16} aria-hidden="true"/></a>
+          <a className="map-shanghai-pin map-munich-pin" href="./?demo=munich" aria-label="拜访慕尼黑穹顶之家"><span className="map-pin-icon"><Trees size={18} aria-hidden="true"/></span><span><strong>慕尼黑</strong><small>穹顶之家 · 去串门</small></span><ArrowUpRight size={16} aria-hidden="true"/></a>
           <div className="map-podium" role="group" aria-label={scope === 'friends' ? '好友榜前三名' : '世界榜前三名'} aria-live="polite">{ranking.slice(0, 3).map((driver, index) => <div key={driver.name} className={`map-podium-driver place-${index + 1}`}><span className="map-medal" aria-label={`第 ${index + 1} 名`}>{index + 1}</span><span><strong>{driver.name}</strong><small>{driver.km.toFixed(1)} km</small></span></div>)}</div>
         </div>
         <div className="map-bottom-note"><span><i/> 1 处可拜访空间 · 其余为示例车友</span></div>

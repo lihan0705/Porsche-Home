@@ -66,7 +66,7 @@ export async function readRsrBytes(response: Response): Promise<ArrayBuffer> {
 }
 
 export async function loadRsrAssembly(signal?: AbortSignal): Promise<WorkshopExhibit> {
-  const bytes = await readRsrBytes(await fetch('/models/42096-rsr.bin', { signal }));
+  const bytes = await readRsrBytes(await fetch('./models/42096-rsr.bin', { signal }));
   await yieldToBrowser();
   signal?.throwIfAborted();
   const loader = new GLTFLoader().register(parser => ({

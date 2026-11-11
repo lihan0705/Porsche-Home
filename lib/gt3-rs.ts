@@ -20,7 +20,7 @@ import type { WorkshopExhibit } from "./workshop-catalog";
  * 封闭外壳，变速箱盒浮在车顶后方、刹车盘伸出轮外，用户判定为「白色零件」要求去掉 ——「保留车就好」。
  * 因此两条路径都不再生成任何幽灵零件。
  */
-const GT3_RS_URL = "/models/porsche-911-gt3-rs.glb.gz";
+const GT3_RS_URL = "./models/porsche-911-gt3-rs.glb.gz";
 const EXHIBIT_COLOR = "#c91f2f";
 const LENGTH = 4.75;                                    // 与 Carrera 主角车同口径的车长（米）
 const BODY = /^BODYY$/;                                 // 车身面板

@@ -16,7 +16,7 @@ export default function SceneLoading({visible,progress,stage}:{visible:boolean;p
   const label=stage||'正在打开你的私人世界';
   return <div className={`scene-loading ${leaving?'is-leaving':''}`} role="status" aria-live="polite">
     <div className="scene-loading-emblem" aria-hidden="true">
-      <Image src="/porsche-crest.png" alt="" width={240} height={318} priority/>
+      <Image src="./porsche-crest.png" alt="" width={240} height={318} unoptimized priority/>
     </div>
     <div className="scene-loading-track" role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={100}><i style={{width:`${value}%`}}/></div>
     <p className="scene-loading-meta"><span>{label}</span><strong>{value}<small>%</small></strong></p>

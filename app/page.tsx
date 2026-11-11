@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import { ArrowRight, ArrowUpRight, Check, ChevronDown, Copy, Home, LoaderCircle, Mail, Map as MapIcon, Moon, QrCode, PenLine, RotateCcw, Settings2, Sparkles, Sun, Sunset, Users, Wrench, X } from "lucide-react";
 import dynamic from "next/dynamic";
 const GardenScene = dynamic(() => import("@/components/GardenScene"), { ssr: false });
@@ -8,17 +8,15 @@ const DioramaLab = dynamic(() => import("@/components/hardsurface/DioramaLab"), 
 import Link from "next/link";
 import { workshopModels } from "@/lib/workshop-catalog";
 import SceneLoading from "@/components/SceneLoading";
-import MissionShowcase from "@/components/MissionShowcase";
 import { FriendsPanel, GalleryPanel, PetPanel, PhoneEntry, VehiclePanel } from "@/components/DemoPanels";
 import { PartsPackPanel } from "@/components/PartsDrop";
 import { PARTS, RARITY_META, clearCollection, partById, readCollection, readInstalled, writeCollection, writeInstalled } from "@/lib/parts-drop";
 import { DEMO_HOME, type HomeConfig, type HomeData, type Postcard } from "@/lib/home-config";
-import { homeSchema } from "@/lib/validation";
 import { getSampleHome, localRecordId, readLocal, sampleMemories, writeLocal, type Friend, type Memory, type Pet } from "@/lib/demo-world";
 
 type ApiHome = HomeData & { authenticated: boolean; aiReady: boolean };
 type ScenePlace = "entry" | "map" | "home" | "workshop" | "memories" | "terrace";
-type ModalType = "story" | "edit" | "invite" | "postcards" | "signin" | "phone" | "friends" | "gallery" | "vehicle" | "pet" | "pack" | "stolen" | null;
+type ModalType = "story" | "edit" | "invite" | "postcards" | "phone" | "friends" | "gallery" | "vehicle" | "pet" | "pack" | "stolen" | null;
 const navigationPlaces = [
   { id: "map", label: "地图", Icon: MapIcon }, { id: "home", label: "归处", Icon: Home },
   { id: "workshop", label: "车库", Icon: Wrench },
@@ -37,23 +35,8 @@ const colors = [
   { label: "曜石黑", value: "#252a29" }, { label: "海湾蓝", value: "#466b82" },
 ];
 const signature = (h: HomeData) => JSON.stringify([h.title, h.ownerName, h.story, h.config]);
-const SIGNIN_DRAFT_KEY = "porsche-home:signin-draft:v1";
-const SIGNIN_DRAFT_MAX_AGE = 30 * 60 * 1000;
-function clearSigninDraft() { try { window.sessionStorage.removeItem(SIGNIN_DRAFT_KEY); } catch { /* Saved server data remains authoritative. */ } }
-function restoreSigninDraft(serverHome: ApiHome, ownRoot: boolean): HomeData | null {
-  if (!ownRoot || serverHome.id || !serverHome.isOwner) return null;
-  try {
-    const raw = window.sessionStorage.getItem(SIGNIN_DRAFT_KEY);
-    if (!raw) return null;
-    const draft = JSON.parse(raw) as { savedAt?: unknown; home?: unknown };
-    const age = typeof draft.savedAt === "number" ? Date.now() - draft.savedAt : -1;
-    const parsed = homeSchema.safeParse(draft.home);
-    if (age < 0 || age > SIGNIN_DRAFT_MAX_AGE || !parsed.success || parsed.data.id) { clearSigninDraft(); return null; }
-    return { ...serverHome, ...parsed.data, id: null };
-  } catch { clearSigninDraft(); return null; }
-}
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...options, signal:options?.signal??AbortSignal.timeout(url.includes('/api/design')?45000:20000), headers: { "Content-Type": "application/json", ...options?.headers } }).catch(error=>{if(error?.name==='TimeoutError'||error?.name==='AbortError')throw new Error('连接超时，请稍后重试；当前布置仍保留在页面中。');throw error;});
+  const response = await fetch(url, { ...options, signal:options?.signal??AbortSignal.timeout(url.includes('api/design')?45000:20000), headers: { "Content-Type": "application/json", ...options?.headers } }).catch(error=>{if(error?.name==='TimeoutError'||error?.name==='AbortError')throw new Error('连接超时，请稍后重试；当前布置仍保留在页面中。');throw error;});
   const data = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new Error(typeof data.message === "string" ? data.message : typeof data.error === "string" ? data.error : "暂时没有完成，请稍后再试。");
   return data as T;
@@ -85,7 +68,6 @@ function Dialog({ title, eyebrow, children, onClose, className = "" }: { title: 
 
 export default function PorscheHome() {
   const [home, setHome] = useState<HomeData>({ ...DEMO_HOME, config: { ...DEMO_HOME.config } });
-  const [authenticated, setAuthenticated] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -160,13 +142,11 @@ export default function PorscheHome() {
       setPet(readLocal("pet", { kind: "none", name: "" }));
     }
     setIsVisit(params.has("visit"));
-    api<ApiHome>(`/api/home${id ? `?id=${encodeURIComponent(id)}` : ""}`)
+    api<ApiHome>(`api/home${id ? `?id=${encodeURIComponent(id)}` : ""}`)
       .then((data) => {
         if (cancelled) return;
         savedSignature.current = signature(data);
-        const restored = restoreSigninDraft(data, !id && !params.has("visit") && window.location.pathname === "/");
-        setHome(restored || data); setAuthenticated(Boolean(data.authenticated)); setAiReady(Boolean(data.aiReady));
-        if (restored) { setSaveState("dirty"); setNotice("已恢复登录前的布置，点击保存就能留住这座家。"); }
+        setHome(data); setAiReady(Boolean(data.aiReady));
       })
       .catch((error) => { if (!cancelled) setLoadError(error.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -201,24 +181,15 @@ export default function PorscheHome() {
     setInstalledPart(null);
     showNotice("零件收藏已清空，可以重新开包了。");
   };
-  const handoffSignin = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (readOnly || latestHome.current.id) return;
-    const draft = homeSchema.safeParse({ ...latestHome.current, id: null });
-    if (!draft.success) { event.preventDefault(); showNotice("请先检查家的名字与故事，再登录保存布置。"); return; }
-    try { window.sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), home: draft.data })); }
-    catch { event.preventDefault(); showNotice("浏览器无法暂存这次布置，请允许此站点使用会话存储后重试。"); }
-  };
   const persist = useCallback(async (): Promise<HomeData> => {
     if (savePromise.current) return savePromise.current;
-    if (!authenticated) { setModal("signin"); throw new Error("请先登录，再保存你的空间。"); }
     const draft = latestHome.current;
     if (readOnly) return draft;
     const draftSignature = signature(draft);
     setSaving(true);
-    const task = api<ApiHome>("/api/home", { method: "POST", body: JSON.stringify({ id: draft.id, title: draft.title, ownerName: draft.ownerName, story: draft.story, config: draft.config }) })
+    const task = api<ApiHome>("api/home", { method: "POST", body: JSON.stringify({ id: draft.id, title: draft.title, ownerName: draft.ownerName, story: draft.story, config: draft.config }) })
       .then((data) => {
         savedSignature.current = draftSignature;
-        clearSigninDraft();
         failedSignature.current = null;
         setHome((current) => ({ ...current, id: data.id, isOwner: data.isOwner, updatedAt: data.updatedAt, postcards: data.postcards || current.postcards }));
         setSaveState(signature(latestHome.current) === draftSignature ? "saved" : "dirty");
@@ -228,17 +199,17 @@ export default function PorscheHome() {
       .finally(() => { setSaving(false); savePromise.current = null; });
     savePromise.current = task;
     return task;
-  }, [authenticated, readOnly]);
+  }, [readOnly]);
   useEffect(() => {
     if (loading || readOnly || saving) return;
     const dirty = dirtySignature !== savedSignature.current;
     if (!dirty) return;
     if (dirtySignature === failedSignature.current) return;
     setSaveState("dirty");
-    if (!home.id || !authenticated) return;
+    if (!home.id) return;
     const timer = window.setTimeout(() => { persist().catch((error) => showNotice(error.message)); }, 1400);
     return () => window.clearTimeout(timer);
-  }, [dirtySignature, home.id, loading, readOnly, authenticated, persist, saving]);
+  }, [dirtySignature, home.id, loading, readOnly, persist, saving]);
   const changeConfig = <K extends keyof HomeConfig>(key: K, value: HomeConfig[K]) => {
     if (readOnly) return;
     setHome((current) => ({ ...current, config: { ...current.config, [key]: value } }));
@@ -247,7 +218,7 @@ export default function PorscheHome() {
     if (!prompt.trim() || designing || readOnly) return;
     setDesigning(true); setDesignResult("");
     try {
-      const result = await api<{ config: HomeConfig; summary: string; mode: "ai" | "basic"; aiReady: boolean }>("/api/design", { method: "POST", body: JSON.stringify({ prompt: prompt.trim(), config: home.config }) });
+      const result = await api<{ config: HomeConfig; summary: string; mode: "ai" | "basic"; aiReady: boolean }>("api/design", { method: "POST", body: JSON.stringify({ prompt: prompt.trim(), config: home.config }) });
       undoConfig.current = { ...home.config };
       setHome((current) => ({ ...current, config: result.config }));
       setAiReady(result.aiReady); setDesignResult(result.summary);
@@ -255,11 +226,11 @@ export default function PorscheHome() {
     finally { setDesigning(false); }
   };
   const share = async () => {
-    if (sample) { setInviteUrl(new URL(sample.href, window.location.origin).href); setCopied(false); setModal("invite"); return; }
+    if (sample) { setInviteUrl(new URL(sample.href, window.location.href).href); setCopied(false); setModal("invite"); return; }
     try {
       const data = readOnly && home.id ? home : await persist();
       if (!data.id) throw new Error("请先保存空间，再创建拜访链接。");
-      setInviteUrl(`${window.location.origin}/?visit=${encodeURIComponent(data.id)}`); setCopied(false); setModal("invite");
+      setInviteUrl(`${window.location.origin}${window.location.pathname}?visit=${encodeURIComponent(data.id)}`); setCopied(false); setModal("invite");
     } catch (error) { showNotice(error instanceof Error ? error.message : "暂时无法生成链接。"); }
   };
   const copyInvite = async () => {
@@ -289,14 +260,14 @@ export default function PorscheHome() {
     if (!home.id) { setPostError("这个空间还未保存。主人保存后，就可以收到明信片了。"); return; }
     setPosting(true);
     try {
-      const response = await api<{ postcard: Postcard }>("/api/postcards", { method: "POST", body: JSON.stringify({ homeId: home.id, name: postcard.name.trim(), message: postcard.message.trim(), theme: postcard.theme }) });
+      const response = await api<{ postcard: Postcard }>("api/postcards", { method: "POST", body: JSON.stringify({ homeId: home.id, name: postcard.name.trim(), message: postcard.message.trim(), theme: postcard.theme }) });
       setHome((current) => ({ ...current, postcards: [response.postcard, ...current.postcards] }));
       setPostcard((current) => ({ ...current, message: "" })); showNotice("明信片已送达，感谢你的来访。");
     } catch (error) { setPostError(error instanceof Error ? error.message : "明信片暂时未送达，请稍后重试。"); }
     finally { setPosting(false); }
   };
   const currentFriend = sample ?? (readOnly && home.id
-    ? { key: home.id, name: home.ownerName, title: home.title, region: "车友庭院", href: `/?visit=${encodeURIComponent(home.id)}` }
+    ? { key: home.id, name: home.ownerName, title: home.title, region: "车友庭院", href: `./?visit=${encodeURIComponent(home.id)}` }
     : null);
   const isMunich = sample?.key === "munich";
   const currentPlace = isMunich ? {
@@ -307,13 +278,13 @@ export default function PorscheHome() {
   } : placeCopy[view];
   const introTitle = view === "home" && sample ? home.title : currentPlace.title;
   const timeLabel = { day: "午后", sunset: "日落", night: "夜晚" }[home.config.time];
-  if (loadError) return <main className="error-page"><div className="brand-wordmark">PORSCHE HOME</div><p className="eyebrow">A PLACE TO RETURN TO</p><h1>暂时没能走进这座家。</h1><p>{loadError}</p><a className="primary-button" href="/">返回我的庭院 <ArrowRight size={16} /></a></main>;
+  if (loadError) return <main className="error-page"><div className="brand-wordmark">PORSCHE HOME</div><p className="eyebrow">A PLACE TO RETURN TO</p><h1>暂时没能走进这座家。</h1><p>{loadError}</p><a className="primary-button" href="./">返回我的庭院 <ArrowRight size={16} /></a></main>;
   return <main className={`home-app time-${home.config.time} is-${view}${isMunich ? " munich-home" : ""}`}>
     <div className="world-interface" inert={!entered}>
     <div className="scene-stage" aria-label={isMunich ? "慕尼黑车友的穹顶之家，可旋转缩放并探索爱车和灯光" : sample?.key === "porsche-rd" ? "江桥研发中心庭院之家" : "可旋转和缩放的三维地图，包含庭院之家、车库、记忆展亭和来客露台"}>{!loading && (isMunich ? <DioramaLab embedded active={entered&&!modal} onReady={() => { setLoadingProgress(100); setSceneReady(true); }} onPostcard={() => setModal("postcards")} parts={parts} onSteal={(id) => { collectPart(id, "从慕尼黑之家偷到"); setStolenPart(id); setModal("stolen"); }} /> : <GardenScene config={home.config} view={view} campus={sample?.key} workshopModelId={workshopModel.id} explode={1} ownedParts={parts} onExhibitStatus={setExhibitStatus} pet={pet.kind} active={entered&&!modal} onReady={() => setSceneReady(true)} onPlaceSelect={selectPlace} onLoadingProgress={(value,stage)=>{setLoadingProgress(value);setLoadingStage(stage);if(value<100)setSceneReady(false);}} />)}</div>
     <div className="scene-vignette" aria-hidden="true" />
     <header className="site-header">
-      <a className="brand" href="/" aria-label="保时捷之家首页"><span className="brand-wordmark">Porsche Home<span className="brand-dot">.</span></span><span className="brand-caption">回到热爱</span></a>
+      <a className="brand" href="./" aria-label="保时捷之家首页"><span className="brand-wordmark">Porsche Home<span className="brand-dot">.</span></span><span className="brand-caption">回到热爱</span></a>
       <div className="header-actions"><button className="quiet-button prototype-header-button" aria-label="手机扫码" onClick={() => setModal("phone")}><QrCode size={16} /><span>扫码</span></button><button className="quiet-button prototype-header-button" aria-label="好友列表" onClick={() => setModal("friends")}><Users size={16} /><span>好友</span></button><span className="save-status" role="status">{saving ? <><LoaderCircle size={12} className="spin" /> 保存中</> : readOnly ? <><span className="status-dot" /> 正在做客</> : home.id && saveState === "saved" ? <><Check size={12} /> 已保存</> : saveState === "error" ? "保存失败" : home.id ? "有未保存更改" : null}</span><button className="invite-button" onClick={share} disabled={loading || saving}><span>{readOnly ? "分享这座家" : "邀请朋友"}</span><ArrowUpRight size={16} /></button></div>
     </header>
     <section className="scene-intro" aria-label="空间介绍">
@@ -336,7 +307,7 @@ export default function PorscheHome() {
           <div className="car-model-label"><span className="car-line-art" aria-hidden="true">911</span><div><strong>一条熟悉的弧线。</strong><p>Carrera 4S · 为热爱选一种心情。</p></div></div>
           <fieldset className="option-group"><legend>车身颜色 <span>{colors.find((color) => color.value.toLowerCase() === home.config.carColor.toLowerCase())?.label || "专属色彩"}</span></legend><div className="color-options">{colors.map((color) => <button key={color.value} title={color.label} aria-label={color.label} aria-pressed={home.config.carColor === color.value} className={`color-swatch ${home.config.carColor === color.value ? "selected" : ""}`} style={{ "--swatch": color.value } as CSSProperties} onClick={() => changeConfig("carColor", color.value)}>{home.config.carColor === color.value && <Check size={15} />}</button>)}</div></fieldset>
           <fieldset className="option-group"><legend>轮圈饰面</legend><div className="segmented-options">{([{ value: "silver", label: "经典银色" }, { value: "black", label: "缎面黑色" }] as const).map((option) => <button key={option.value} aria-pressed={home.config.wheels === option.value} className={home.config.wheels === option.value ? "selected" : ""} onClick={() => changeConfig("wheels", option.value)}>{option.label}</button>)}</div></fieldset>
-          <a className="model-disclosure" href="/models/attribution.txt" target="_blank" rel="noreferrer">车型模型：Lionsharp Studios · CC BY-SA 4.0 <ArrowUpRight size={10} /></a>
+          <a className="model-disclosure" href="./models/attribution.txt" target="_blank" rel="noreferrer">车型模型：Lionsharp Studios · CC BY-SA 4.0 <ArrowUpRight size={10} /></a>
         </>}
         <div className="composer"><div className="composer-label"><Sparkles size={14} /><span>{aiReady ? "AI 空间设计师" : "一句话布置"}</span><span className={`model-state ${aiReady ? "connected" : ""}`}>{aiReady ? "已连接" : "基础模式"}</span></div><textarea aria-label="描述你理想中的空间" placeholder="例如：雨夜的松林，暖光车库，松林绿的车身……" value={prompt} maxLength={500} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) applyDesign(); }} /><div className="prompt-suggestions"><button onClick={() => setPrompt("日落、橄榄树、暖砂白车身")}>日落时分</button><button onClick={() => setPrompt("雨夜、松树、黑色轮圈")}>雨夜松林</button></div><button className="primary-button design-submit" onClick={applyDesign} disabled={designing || !prompt.trim()}>{designing ? <LoaderCircle size={15} className="spin" /> : <Sparkles size={15} />}<span>{designing ? "正在布置…" : "让想象发生"}</span><ArrowRight size={15} /></button><p className="model-hint">{aiReady ? "AI 将调整可用的建筑、植物、天气和配色。" : "大模型待连接；当前按支持的风格关键词布置。"}</p></div>
         {designResult && <div className="design-result" role="status"><p>{designResult}</p>{undoConfig.current && <button onClick={() => { const config = undoConfig.current; if (config) setHome((current) => ({ ...current, config })); undoConfig.current = null; setDesignResult("已恢复上一次布置。"); }}><RotateCcw size={12} /> 撤销这次布置</button>}</div>}
@@ -358,7 +329,7 @@ export default function PorscheHome() {
     <footer className="scene-footer"><span className="scene-number">{currentPlace.footer}</span><span className="scene-help">拖动旋转 <i /> 滚动缩放</span></footer>
     <nav className="bottom-nav valley-nav" aria-label="空间导航">{navigationPlaces.filter(place => (sample?.key !== "porsche-rd" && !isMunich) || place.id !== "workshop").map(({ id, label, Icon }) => id === "map" ? <Link key={id} href="/map"><Icon size={17} strokeWidth={1.6}/><span>{label}</span></Link> : <button key={id} className={view === id||(view==='entry'&&id==='home') ? "active" : ""} aria-current={view === id||(view==='entry'&&id==='home') ? "location" : undefined} onClick={() => selectPlace(id)}><Icon size={17} strokeWidth={1.6} /><span>{sample?.key === "porsche-rd" && id === "home" ? "庭院之家" : label}</span></button>)}</nav>
     {!readOnly && <button className={`customize-button ${panelOpen ? "is-open" : ""}`} onClick={() => { if (!panelOpen) selectPlace("home"); setPanelOpen(!panelOpen); }} aria-expanded={panelOpen} aria-label="布置空间"><Settings2 size={16} /><span>{panelOpen ? "收起布置" : "布置空间"}</span><ChevronDown size={13} /></button>}
-    {readOnly && <a className="customize-button" href="/"><Home size={15} /><span>回到我的家</span><ArrowUpRight size={14} /></a>}
+    {readOnly && <a className="customize-button" href="./"><Home size={15} /><span>回到我的家</span><ArrowUpRight size={14} /></a>}
     </div>
     <SceneLoading visible={loading || !sceneReady} progress={loadingProgress} stage={loadingStage}/>
     {notice && <div className="toast" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice("")}><X size={14} /></button></div>}
@@ -388,7 +359,6 @@ export default function PorscheHome() {
     }} /></Dialog>}
     {modal === "story" && <Dialog title={view !== "workshop" ? home.title : "走近热爱的每一个细节"} eyebrow={view !== "workshop" ? "A STORY WORTH SHARING" : "INSIDE THE GARAGE"} onClose={closeModal} className="story-modal"><div className="story-rule" /><p className="story-owner">{view !== "workshop" ? `${home.ownerName} · 关于这座家` : "概念车库 · 车辆结构探索"}</p><p className="story-body">{view !== "workshop" ? home.story : "在车库里，你可以播放或拖动拼装进度，旋转查看车身、轮组、底盘与动力组件如何归位。Carrera 4S 的内部机械为结构示意，Technic 42096 则按模型装配分步演示。"}</p>{!readOnly && view !== "workshop" && <button className="text-button" onClick={openEdit}><PenLine size={14} /> 写下我的故事</button>}<p className="story-signoff">A home for your passion.</p></Dialog>}
     {modal === "edit" && <Dialog title="让这座家，更像你。" eyebrow="YOUR HOME, YOUR STORY" onClose={closeModal}><form className="edit-form" onSubmit={(event) => { event.preventDefault(); setHome((current) => ({ ...current, title: edit.title.trim(), ownerName: edit.ownerName.trim(), story: edit.story.trim() })); setModal(null); showNotice("故事已更新，记得保存你的家。"); }}><label>家的名字<input value={edit.title} maxLength={50} required onChange={(event) => setEdit({ ...edit, title: event.target.value })} /></label><label>怎么称呼你<input value={edit.ownerName} maxLength={30} required onChange={(event) => setEdit({ ...edit, ownerName: event.target.value })} /></label><label>我与爱车的故事<textarea value={edit.story} maxLength={800} required rows={5} onChange={(event) => setEdit({ ...edit, story: event.target.value })} /><span className="field-count">{edit.story.length}/800</span></label><button className="primary-button" type="submit">把故事放进家里 <ArrowRight size={15} /></button></form></Dialog>}
-    {modal === "signin" && <Dialog title="欢迎回来" eyebrow="PORSCHE / VISION MODEL" onClose={closeModal} className="signin-modal mission-signin"><MissionShowcase compact/><div className="signin-modal-copy"><p className="modal-copy">登录，收藏你的 911 与专属空间。<br/>让每一次归来，都有自己的故事。</p><a className="primary-button signin-continue" href="/signin-with-chatgpt?return_to=%2F" target="_top" onClick={handoffSignin}>使用 ChatGPT 登录 <ArrowUpRight size={17} /></a><p className="signin-benefits">保存专属布置 <span/> 邀请朋友来访 <span/> 收藏旅途来信</p></div></Dialog>}
     {modal === "invite" && <Dialog title="好风景，想与你分享。" eyebrow="YOU ARE ALWAYS WELCOME" onClose={closeModal}><div className="invitation-illustration" aria-hidden="true"><Home size={34} strokeWidth={1} /><span>COME ON OVER</span><div className="invitation-stamp">HOME<br />911</div></div><p className="modal-copy">邀请朋友走进「{home.title}」，看看你的车，读一段故事，留下一张明信片。</p><label className="invite-link-label">专属拜访链接<div className="invite-link-row"><input aria-label="专属拜访链接" readOnly value={inviteUrl} onFocus={(event) => event.target.select()} /><button aria-label="复制拜访链接" onClick={copyInvite}>{copied ? <Check size={17} /> : <Copy size={17} />}</button></div></label><div className="invite-dialog-actions"><button className="primary-button" onClick={copyInvite}>{copied ? "链接已复制" : "复制邀请链接"}{copied ? <Check size={15} /> : <ArrowRight size={15} />}</button><a className="text-button" href={inviteUrl} target="_blank" rel="noreferrer">以访客身份打开 <ArrowUpRight size={14} /></a></div><p className="fine-print">拜访链接受站点访问权限限制，仅已获权限的朋友可打开。</p></Dialog>}
     {modal === "postcards" && <Dialog title={readOnly ? "把这一刻，留在这里。" : "远方来信，近在眼前。"} eyebrow="POSTCARDS FROM FRIENDS" onClose={closeModal} className="postcards-modal"><div className="postcards-layout"><section className="postcard-compose"><div className={`postcard-preview theme-${postcard.theme}`}><span className="postcard-kicker">A LITTLE NOTE, A LASTING MEMORY</span><div className="postcard-stamp">P<span>HOME</span></div><label className="sr-only" htmlFor="postcard-message">明信片内容</label><textarea id="postcard-message" placeholder="来过这里，想对你说……" value={postcard.message} maxLength={300} onChange={(event) => setPostcard({ ...postcard, message: event.target.value })} /><div className="postcard-from"><span>FROM</span><label className="sr-only" htmlFor="postcard-name">你的名字</label><input id="postcard-name" placeholder="你的名字" maxLength={30} value={postcard.name} onChange={(event) => setPostcard({ ...postcard, name: event.target.value })} /></div><span className="postcard-address">TO · {home.ownerName}的家</span></div><fieldset className="postcard-themes"><legend>选一张喜欢的信纸</legend>{[{ value: "forest", label: "森林绿" }, { value: "sand", label: "暖砂色" }, { value: "sunset", label: "夕阳粉" }].map((theme) => <button key={theme.value} aria-label={theme.label} title={theme.label} aria-pressed={postcard.theme === theme.value} className={`theme-dot theme-${theme.value} ${postcard.theme === theme.value ? "selected" : ""}`} onClick={() => setPostcard({ ...postcard, theme: theme.value })}>{postcard.theme === theme.value && <Check size={12} />}</button>)}</fieldset>{postError && <p className="form-error" role="alert">{postError}</p>}<button className="primary-button" onClick={sendPostcard} disabled={posting || !postcard.name.trim() || !postcard.message.trim()}>{posting ? <LoaderCircle size={15} className="spin" /> : <Mail size={15} />} {posting ? "正在投递…" : "寄出这张明信片"} <ArrowUpRight size={15} /></button>{sample ? <p className="fine-print">演示明信片保存在当前浏览器。</p> : !home.id && <p className="fine-print">空间保存后，即可收发明信片。</p>}</section><section className="postcard-inbox" aria-label="收到的明信片"><div className="inbox-title"><span>留在这里的心意</span><span>{home.postcards.length.toString().padStart(2, "0")}</span></div>{home.postcards.length === 0 ? <div className="empty-postcards"><Mail size={30} strokeWidth={1} /><p>第一封来信，还在路上。</p><span>邀请一个朋友，<br />让这里开始有共同的回忆。</span></div> : home.postcards.map((card) => <article key={card.id} className={`received-postcard theme-${["forest", "sand", "sunset"].includes(card.theme) ? card.theme : "forest"}`}><p>{card.message}</p><div><span>— {card.name}</span><time dateTime={new Date(card.createdAt).toISOString()}>{new Date(card.createdAt).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit", timeZone: "Asia/Shanghai" })}</time></div></article>)}</section></div></Dialog>}
   </main>;
