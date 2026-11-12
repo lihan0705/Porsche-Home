@@ -511,7 +511,7 @@
   transition:transform .35s ease,opacity .5s ease,filter .5s ease;
   animation:packCardIn .55s cubic-bezier(.2,.9,.3,1) backwards}
 .pack-card:not(:disabled):hover{transform:translateY(-9px)}
-.pack-card:disabled{cursor:default}
+.pack-card:disabled{cursor:default;opacity:1}
 @keyframes packCardIn{from{opacity:0;transform:translateY(26px) scale(.93)}to{opacity:1;transform:none}}
 .pack-card-inner{position:absolute;inset:0;display:block;transform-style:preserve-3d;
   transition:transform .64s cubic-bezier(.25,.85,.3,1)}
