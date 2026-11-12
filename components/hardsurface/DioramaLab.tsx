@@ -11,7 +11,6 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Billboard, OrbitControls, useTexture } from '@react-three/drei';
 import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
-import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -166,7 +165,7 @@ export default function DioramaLab({ embedded = false, active = true, onReady, o
         <div className="hs-badge">SELENE // SITE 07</div>
         <div className="hs-sub">工业硬表面质感样片 · Phase 1</div>
         <div className="hs-hint">平台结构 · 主穹顶 · 作业照明 · 场地设施 · 车辆总成</div>
-        <Link href="/" className="hs-back">← 返回保时捷之家</Link>
+        <a href="../" className="hs-back">← 返回保时捷之家</a>
       </div>
 
       <div className="hs-panel hs-tr">

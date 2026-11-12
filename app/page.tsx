@@ -5,7 +5,6 @@ import { ArrowRight, ArrowUpRight, Check, ChevronDown, Copy, Home, LoaderCircle,
 import dynamic from "next/dynamic";
 const GardenScene = dynamic(() => import("@/components/GardenScene"), { ssr: false });
 const DioramaLab = dynamic(() => import("@/components/hardsurface/DioramaLab"), { ssr: false });
-import Link from "next/link";
 import { workshopModels } from "@/lib/workshop-catalog";
 import SceneLoading from "@/components/SceneLoading";
 import { FriendsPanel, GalleryPanel, PetPanel, PhoneEntry, VehiclePanel } from "@/components/DemoPanels";
@@ -327,7 +326,7 @@ export default function PorscheHome() {
       <div className="prototype-workshop-footer"><p className="workshop-disclosure">{workshopModel.disclosure}</p>{workshopModel.instructions && <a className="text-button" href={workshopModel.instructions} target="_blank" rel="noreferrer">官方说明书 <ArrowUpRight size={13} /></a>}{!workshopModel.create && <button className="text-button" onClick={() => setModal("vehicle")}>车况档案 <ArrowUpRight size={13} /></button>}</div>
     </section>}
     <footer className="scene-footer"><span className="scene-number">{currentPlace.footer}</span><span className="scene-help">拖动旋转 <i /> 滚动缩放</span></footer>
-    <nav className="bottom-nav valley-nav" aria-label="空间导航">{navigationPlaces.filter(place => (sample?.key !== "porsche-rd" && !isMunich) || place.id !== "workshop").map(({ id, label, Icon }) => id === "map" ? <Link key={id} href="/map"><Icon size={17} strokeWidth={1.6}/><span>{label}</span></Link> : <button key={id} className={view === id||(view==='entry'&&id==='home') ? "active" : ""} aria-current={view === id||(view==='entry'&&id==='home') ? "location" : undefined} onClick={() => selectPlace(id)}><Icon size={17} strokeWidth={1.6} /><span>{sample?.key === "porsche-rd" && id === "home" ? "庭院之家" : label}</span></button>)}</nav>
+    <nav className="bottom-nav valley-nav" aria-label="空间导航">{navigationPlaces.filter(place => (sample?.key !== "porsche-rd" && !isMunich) || place.id !== "workshop").map(({ id, label, Icon }) => id === "map" ? <a key={id} href="./map"><Icon size={17} strokeWidth={1.6}/><span>{label}</span></a> : <button key={id} className={view === id||(view==='entry'&&id==='home') ? "active" : ""} aria-current={view === id||(view==='entry'&&id==='home') ? "location" : undefined} onClick={() => selectPlace(id)}><Icon size={17} strokeWidth={1.6} /><span>{sample?.key === "porsche-rd" && id === "home" ? "庭院之家" : label}</span></button>)}</nav>
     {!readOnly && <button className={`customize-button ${panelOpen ? "is-open" : ""}`} onClick={() => { if (!panelOpen) selectPlace("home"); setPanelOpen(!panelOpen); }} aria-expanded={panelOpen} aria-label="布置空间"><Settings2 size={16} /><span>{panelOpen ? "收起布置" : "布置空间"}</span><ChevronDown size={13} /></button>}
     {readOnly && <a className="customize-button" href="./"><Home size={15} /><span>回到我的家</span><ArrowUpRight size={14} /></a>}
     </div>

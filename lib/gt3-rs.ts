@@ -30,16 +30,85 @@ const RIMS = new Set(["spoke", "material", "lugs"]);    // 轮辐 / 轮辋 / 螺
 // starts this download early (GardenScene workshop prewarm) so the bytes are ready
 // before the workshop opens. Decompressed bytes are cached for the session.
 let bytesPromise: Promise<ArrayBuffer> | undefined;
+let cachedBytes: ArrayBuffer | undefined;
+let downloadProgress: ((received: number, total: number | null) => void) | null = null;
 
-export function prefetchGt3Rs(): Promise<ArrayBuffer> {
-  bytesPromise ??= fetch(GT3_RS_URL).then(readRsrBytes).catch(error => { bytesPromise = undefined; throw error; });
+export type Gt3RsProgress = (received: number, total: number | null) => void;
+
+// The garden's ready gate waits on this promise, so a silently stalled TCP stream
+// (corporate proxies love to throttle long transfers) would pin the loading overlay
+// at 96% forever. Guard every read with a no-bytes watchdog, and retry the whole
+// download a couple of times before surfacing the error (the scene then falls back
+// to the concept car instead of hanging).
+const STALL_TIMEOUT_MS = 20000;
+const MAX_ATTEMPTS = 3;
+
+async function downloadGt3Rs(): Promise<ArrayBuffer> {
+  for (let attempt = 1; ; attempt++) {
+    const controller = new AbortController();
+    let stall: ReturnType<typeof setTimeout>;
+    let received = 0;
+    const resetWatchdog = () => {
+      clearTimeout(stall);
+      stall = setTimeout(() => controller.abort(new DOMException('GT3 RS download stalled', 'TimeoutError')), STALL_TIMEOUT_MS);
+    };
+    try {
+      resetWatchdog();
+      const response = await fetch(GT3_RS_URL, { signal: controller.signal });
+      if (!response.ok || !response.body) throw new Error(`GT3 RS download failed: HTTP ${response.status}`);
+      const totalHeader = response.headers.get('content-length');
+      const total = totalHeader && /^\d+$/.test(totalHeader) ? Number(totalHeader) : null;
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        downloadProgress?.(received, total);
+        resetWatchdog();
+      }
+      clearTimeout(stall);
+      const bytes = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      // Same gzip handling as the RSR model: hosts that negotiate Content-Encoding
+      // deliver plain glb, otherwise the bytes are gzip and need manual decompression.
+      return await readRsrBytes(new Response(new Blob([bytes])));
+    } catch (error) {
+      clearTimeout(stall);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+export function prefetchGt3Rs(onProgress?: Gt3RsProgress): Promise<ArrayBuffer> {
+  if (cachedBytes) {
+    onProgress?.(cachedBytes.byteLength, cachedBytes.byteLength);
+    return Promise.resolve(cachedBytes);
+  }
+  // Only one download runs at a time; the latest subscriber wins.
+  if (onProgress) downloadProgress = onProgress;
+  bytesPromise ??= downloadGt3Rs().then(bytes => {
+    cachedBytes = bytes;
+    downloadProgress = null;
+    return bytes;
+  }).catch(error => {
+    bytesPromise = undefined;
+    downloadProgress = null;
+    throw error;
+  });
   return bytesPromise;
 }
 
 type Gt3RsModel = { group: THREE.Group; paint: THREE.MeshPhysicalMaterial; rims: THREE.MeshStandardMaterial[] };
 
-async function buildGt3Rs(color: string, shadows: boolean, signal?: AbortSignal): Promise<Gt3RsModel> {
-  const bytes = await prefetchGt3Rs();
+async function buildGt3Rs(color: string, shadows: boolean, signal?: AbortSignal, onProgress?: Gt3RsProgress): Promise<Gt3RsModel> {
+  const bytes = await prefetchGt3Rs(onProgress);
   signal?.throwIfAborted();
   const { scene: model } = await new GLTFLoader().parseAsync(bytes, "");
   if (signal?.aborted) { disposeSceneObject(model); signal.throwIfAborted(); }
@@ -87,8 +156,8 @@ export async function loadGt3Rs(signal?: AbortSignal): Promise<WorkshopExhibit> 
 }
 
 /** 庭院 / 欢迎镜头主角车：契约与 `loadDisplayCar()` 一致，可换车色与轮圈饰面。 */
-export async function loadGt3RsDisplay(color: string, signal?: AbortSignal): Promise<DisplayCar> {
-  const { group, paint, rims } = await buildGt3Rs(color, true, signal);
+export async function loadGt3RsDisplay(color: string, signal?: AbortSignal, onProgress?: Gt3RsProgress): Promise<DisplayCar> {
+  const { group, paint, rims } = await buildGt3Rs(color, true, signal, onProgress);
   tintRims(rims, 'silver');
   return { group, parts: [], paint, rims };
 }

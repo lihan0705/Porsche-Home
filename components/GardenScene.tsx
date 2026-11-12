@@ -515,7 +515,11 @@ export default function GardenScene({config,view,workshopModelId,campus,explode,
       // 主角车（庭院 / 欢迎镜头）= 911 GT3 RS：与车库展车同一台车模，车色与轮圈跟随配置面板。
       const { loadGt3RsDisplay } = await import('../lib/gt3-rs');
       if(stopped)return;
-      const loaded = await loadGt3RsDisplay(latest.current.config.carColor);
+      const loaded = await loadGt3RsDisplay(latest.current.config.carColor, undefined, (received, total) => {
+        const mb = (value: number) => (value / 1048576).toFixed(1);
+        const label = total ? `正在准备 911 · ${mb(received)} / ${mb(total)} MB` : received > 0 ? `正在准备 911 · ${mb(received)} MB` : '正在准备 911';
+        latest.current.onLoadingProgress?.(96, label);
+      });
       if(stopped){disposeSceneObject(loaded.group);return;}
       try { if(!await prepare(loaded.group)){disposeSceneObject(loaded.group);return;} }
       catch(error){disposeSceneObject(loaded.group);throw error;}
